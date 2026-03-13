@@ -1,14 +1,29 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { ArrowUpDown, TableProperties } from "lucide-react";
+import {
+  createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type SortingState,
+  type ColumnDef,
+} from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { ArrowUpDown, Download, Search, TableProperties } from "lucide-react";
 import { toast } from "sonner";
 
 import { courseApi, gradeApi } from "@/lib/api";
-import type { GradebookStudentRow, GradebookGradeEntry } from "@/lib/types";
+import type {
+  GradebookAssignment,
+  GradebookGradeEntry,
+  GradebookStudentRow,
+} from "@/lib/types";
 import { useApiOpts } from "@/hooks/useApiOpts";
 import {
   Breadcrumb,
@@ -23,19 +38,133 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface FlatRow {
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  enrollment_id: string;
+  /** grade_id keyed by assignment_id */
+  gradesByAssignment: Map<string, GradebookGradeEntry>;
+  totalEarned: number;
+  totalMax: number;
+}
+
 interface EditCell {
   studentId: string;
+  assignmentId: string;
   gradeId: string;
   value: string;
 }
+
+// ── Column dimensions ─────────────────────────────────────────────────────────
+
+const STICKY_COL_W = 200;
+const DATA_COL_W = 130;
+const TOTAL_COL_W = 90;
+const ROW_H = 44;
+const HEADER_H = 52;
+
+// ── Grade cell ────────────────────────────────────────────────────────────────
+
+function GradeCell({
+  entry,
+  studentId,
+  assignmentId,
+  editCell,
+  setEditCell,
+  onCommit,
+}: {
+  entry: GradebookGradeEntry | undefined;
+  studentId: string;
+  assignmentId: string;
+  editCell: EditCell | null;
+  setEditCell: (c: EditCell | null) => void;
+  onCommit: (gradeId: string, score: number) => void;
+}) {
+  const isEditing =
+    editCell?.studentId === studentId &&
+    editCell?.assignmentId === assignmentId;
+
+  if (!entry) {
+    return (
+      <span className="text-muted-foreground text-xs">—</span>
+    );
+  }
+
+  if (isEditing) {
+    return (
+      <Input
+        autoFocus
+        type="number"
+        min={0}
+        max={entry.max_score}
+        step={0.5}
+        className="h-7 w-20 px-2 text-xs"
+        value={editCell?.value ?? ""}
+        onChange={(e) =>
+          setEditCell(
+            editCell ? { ...editCell, value: e.target.value } : null,
+          )
+        }
+        onBlur={() => {
+          const score = parseFloat(editCell?.value ?? "");
+          if (!isNaN(score) && score >= 0)
+            onCommit(entry.grade_id, score);
+          setEditCell(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            const score = parseFloat(editCell?.value ?? "");
+            if (!isNaN(score) && score >= 0)
+              onCommit(entry.grade_id, score);
+            setEditCell(null);
+          }
+          if (e.key === "Escape") setEditCell(null);
+        }}
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={() =>
+        setEditCell({
+          studentId,
+          assignmentId,
+          gradeId: entry.grade_id,
+          value: String(entry.score),
+        })
+      }
+      className={cn(
+        "rounded px-1.5 py-0.5 text-xs hover:bg-muted transition-colors cursor-pointer",
+        entry.score / entry.max_score < 0.6
+          ? "text-destructive font-medium"
+          : "text-foreground",
+      )}
+    >
+      {entry.score}/{entry.max_score}
+    </button>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function GradebookPage() {
   const { courseId } = useParams<{ courseId: string }>();
   const opts = useApiOpts();
   const qc = useQueryClient();
 
-  const [sortAsc, setSortAsc] = useState(true);
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "student_name", desc: false },
+  ]);
   const [editCell, setEditCell] = useState<EditCell | null>(null);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ── Data ────────────────────────────────────────────────────────────────────
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["gradebook", courseId],
@@ -44,68 +173,184 @@ export default function GradebookPage() {
     staleTime: 30_000,
   });
 
+  // ── Mutations ───────────────────────────────────────────────────────────────
+
   const updateGrade = useMutation({
     mutationFn: ({ gradeId, score }: { gradeId: string; score: number }) =>
       gradeApi.update(gradeId, { score }, opts),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["gradebook", courseId] });
-      toast.success("Grade updated");
+
+    // Optimistic update
+    onMutate: async ({ gradeId, score }) => {
+      await qc.cancelQueries({ queryKey: ["gradebook", courseId] });
+      const previous = qc.getQueryData(["gradebook", courseId]);
+      qc.setQueryData(["gradebook", courseId], (old: typeof data) => {
+        if (!old) return old;
+        return {
+          ...old,
+          students: old.students.map((s) => ({
+            ...s,
+            grades: s.grades.map((g) =>
+              g.grade_id === gradeId ? { ...g, score } : g,
+            ),
+          })),
+        };
+      });
+      return { previous };
     },
-    onError: () => toast.error("Failed to update grade"),
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous)
+        qc.setQueryData(["gradebook", courseId], ctx.previous);
+      toast.error("Failed to update grade");
+    },
+    onSuccess: () => toast.success("Grade updated"),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["gradebook", courseId] });
+    },
   });
 
-  const commitEdit = useCallback(() => {
-    if (!editCell) return;
-    const score = parseFloat(editCell.value);
-    if (!isNaN(score) && score >= 0) {
-      updateGrade.mutate({ gradeId: editCell.gradeId, score });
+  const handleCommit = useCallback(
+    (gradeId: string, score: number) => {
+      updateGrade.mutate({ gradeId, score });
+    },
+    [updateGrade],
+  );
+
+  // ── CSV export ──────────────────────────────────────────────────────────────
+
+  const handleExport = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/courses/${courseId}/gradebook/export`,
+        { headers: { "X-User-Id": opts.userId } },
+      );
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `gradebook_${courseId}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("CSV export failed");
     }
-    setEditCell(null);
-  }, [editCell, updateGrade]);
+  }, [courseId, opts.userId]);
+
+  // ── Flatten data for TanStack Table ─────────────────────────────────────────
+
+  const assignments: GradebookAssignment[] = data?.assignments ?? [];
+
+  const flatRows: FlatRow[] = useMemo(() => {
+    if (!data) return [];
+    return data.students.map((s: GradebookStudentRow) => {
+      const gradesByAssignment = new Map<string, GradebookGradeEntry>();
+      for (const g of s.grades) {
+        if (g.assignment_id) gradesByAssignment.set(g.assignment_id, g);
+      }
+      const totalEarned = s.grades.reduce((acc, g) => acc + g.score, 0);
+      const totalMax = s.grades.reduce((acc, g) => acc + g.max_score, 0);
+      return {
+        student_id: s.student_id,
+        student_name: s.student_name,
+        student_email: s.student_email,
+        enrollment_id: s.enrollment_id,
+        gradesByAssignment,
+        totalEarned,
+        totalMax,
+      };
+    });
+  }, [data]);
+
+  // ── TanStack Table columns ──────────────────────────────────────────────────
+
+  const colHelper = createColumnHelper<FlatRow>();
+
+  const columns = useMemo(
+    () =>
+      [
+        colHelper.accessor("student_name", {
+          id: "student_name",
+          header: "Student",
+          enableSorting: true,
+          filterFn: "includesString",
+        }),
+        // One column per assignment — created dynamically
+        ...assignments.map((a) =>
+          colHelper.display({
+            id: `asgn_${a.id}`,
+            header: a.title,
+            meta: { assignmentId: a.id, pointsPossible: a.points_possible },
+          }),
+        ),
+        colHelper.display({ id: "total", header: "Total" }),
+      ] as ColumnDef<FlatRow, unknown>[],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [assignments],
+  );
+
+  const table = useReactTable({
+    data: flatRows,
+    columns,
+    state: { globalFilter, sorting },
+    onGlobalFilterChange: setGlobalFilter,
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    globalFilterFn: "includesString",
+  });
+
+  const rows = table.getRowModel().rows;
+
+  // ── Virtualization ──────────────────────────────────────────────────────────
+
+  // Row virtualizer
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_H,
+    overscan: 8,
+  });
+
+  // Column virtualizer (only assignment columns; sticky + total are excluded)
+  const assignmentCols = assignments;
+  const colVirtualizer = useVirtualizer({
+    count: assignmentCols.length,
+    horizontal: true,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => DATA_COL_W,
+    overscan: 4,
+  });
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const virtualCols = colVirtualizer.getVirtualItems();
+  const totalRowHeight = rowVirtualizer.getTotalSize();
+  const totalColWidth = colVirtualizer.getTotalSize();
+
+  // ── Loading / error guards ──────────────────────────────────────────────────
 
   if (isLoading) {
     return (
       <div className="flex flex-col gap-4">
         <Skeleton className="h-5 w-48" />
-        <Skeleton className="h-96 rounded-xl" />
+        <Skeleton className="h-10 w-full rounded-lg" />
+        <Skeleton className="h-[500px] rounded-xl" />
       </div>
     );
   }
 
   if (isError || !data) {
     return (
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-destructive">
-          Failed to load gradebook. Ensure the backend is running and your User
-          ID is set to a seeded UUID.
-        </p>
-      </div>
+      <p className="text-sm text-destructive">
+        Failed to load gradebook. Ensure the backend is running.
+      </p>
     );
   }
 
-  // Sort students by name
-  const students: GradebookStudentRow[] = [...data.students].sort((a, b) =>
-    sortAsc
-      ? a.student_name.localeCompare(b.student_name)
-      : b.student_name.localeCompare(a.student_name),
-  );
+  const totalContainerWidth =
+    STICKY_COL_W + totalColWidth + TOTAL_COL_W;
 
-  // Build grade lookup: student_id → assignment_id → GradebookGradeEntry
-  const gradeMap = new Map<string, Map<string, GradebookGradeEntry>>();
-  for (const row of students) {
-    const m = new Map<string, GradebookGradeEntry>();
-    for (const g of row.grades) {
-      if (g.assignment_id) m.set(g.assignment_id, g);
-    }
-    gradeMap.set(row.student_id, m);
-  }
-
-  // Compute per-student totals
-  function studentTotal(row: GradebookStudentRow): { earned: number; max: number } {
-    const earned = row.grades.reduce((s, g) => s + g.score, 0);
-    const max = row.grades.reduce((s, g) => s + g.max_score, 0);
-    return { earned, max };
-  }
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col gap-4">
@@ -124,151 +369,188 @@ export default function GradebookPage() {
         </BreadcrumbList>
       </Breadcrumb>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <TableProperties className="h-5 w-5 text-muted-foreground" />
           <h1 className="text-lg font-semibold">Gradebook</h1>
+          <span className="text-xs text-muted-foreground">
+            ({rows.length} students)
+          </span>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Click any score cell to edit inline
-        </p>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search students…"
+              value={globalFilter}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="h-8 pl-8 w-52 text-sm"
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export CSV
+          </Button>
+          <p className="text-xs text-muted-foreground hidden md:block">
+            Click a score to edit
+          </p>
+        </div>
       </div>
 
-      {/* Scrollable table */}
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="min-w-full text-sm border-collapse">
-          <thead>
-            <tr className="bg-muted/50">
-              {/* Sticky student name column */}
-              <th className="sticky left-0 z-10 bg-muted/50 px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap border-r min-w-[180px]">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto p-0 font-medium text-muted-foreground hover:text-foreground gap-1"
-                  onClick={() => setSortAsc((p) => !p)}
-                >
-                  Student
-                  <ArrowUpDown className="h-3.5 w-3.5" />
-                </Button>
-              </th>
+      {/* Virtual table */}
+      <div
+        ref={scrollRef}
+        className="overflow-auto rounded-xl border"
+        style={{ maxHeight: "calc(100vh - 220px)", minHeight: 300 }}
+      >
+        {/* Minimum width so the virtual container is wide enough */}
+        <div style={{ minWidth: totalContainerWidth }}>
+          {/* ── Sticky header ── */}
+          <div
+            className="sticky top-0 z-20 flex border-b bg-muted/50"
+            style={{ height: HEADER_H }}
+          >
+            {/* Sticky student column header */}
+            <div
+              className="sticky left-0 z-30 flex items-end pb-2 px-4 bg-muted/50 border-r shrink-0"
+              style={{ width: STICKY_COL_W }}
+            >
+              <button
+                className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() =>
+                  setSorting((prev) => {
+                    const current = prev.find((s) => s.id === "student_name");
+                    return [
+                      { id: "student_name", desc: current ? !current.desc : false },
+                    ];
+                  })
+                }
+              >
+                Student
+                <ArrowUpDown className="h-3 w-3" />
+              </button>
+            </div>
 
-              {/* Assignment columns */}
-              {data.assignments.map((a) => (
-                <th
-                  key={a.id}
-                  className="px-3 py-3 text-left font-medium text-muted-foreground whitespace-nowrap min-w-[130px] border-r last:border-r-0"
-                >
-                  <div className="truncate max-w-[120px]" title={a.title}>
-                    {a.title}
+            {/* Virtual assignment column headers */}
+            <div
+              className="relative flex-1"
+              style={{ width: totalColWidth }}
+            >
+              {virtualCols.map((vc) => {
+                const asgn = assignments[vc.index];
+                if (!asgn) return null;
+                return (
+                  <div
+                    key={vc.key}
+                    className="absolute top-0 flex flex-col justify-end pb-2 px-3 border-r"
+                    style={{
+                      left: vc.start,
+                      width: vc.size,
+                      height: HEADER_H,
+                    }}
+                  >
+                    <div
+                      className="truncate text-xs font-semibold text-muted-foreground"
+                      title={asgn.title}
+                    >
+                      {asgn.title}
+                    </div>
+                    <div className="text-[10px] opacity-60 font-normal">
+                      /{asgn.points_possible}
+                    </div>
                   </div>
-                  <div className="text-[10px] font-normal opacity-70 mt-0.5">
-                    /{a.points_possible}
-                  </div>
-                </th>
-              ))}
+                );
+              })}
+            </div>
 
-              {/* Total */}
-              <th className="px-3 py-3 text-left font-medium text-muted-foreground whitespace-nowrap min-w-[80px]">
+            {/* Total header */}
+            <div
+              className="sticky right-0 flex items-end pb-2 px-3 bg-muted/50 border-l shrink-0"
+              style={{ width: TOTAL_COL_W }}
+            >
+              <span className="text-xs font-semibold text-muted-foreground">
                 Total
-              </th>
-            </tr>
-          </thead>
+              </span>
+            </div>
+          </div>
 
-          <tbody>
-            {students.map((row, ri) => {
-              const studentGrades = gradeMap.get(row.student_id);
-              const { earned, max } = studentTotal(row);
-              const pct = max > 0 ? Math.round((earned / max) * 100) : 0;
+          {/* ── Virtual rows ── */}
+          <div style={{ position: "relative", height: totalRowHeight }}>
+            {virtualRows.map((vr) => {
+              const row = rows[vr.index];
+              if (!row) return null;
+              const flatRow = row.original;
+              const pct =
+                flatRow.totalMax > 0
+                  ? Math.round((flatRow.totalEarned / flatRow.totalMax) * 100)
+                  : 0;
 
               return (
-                <tr
-                  key={row.student_id}
+                <div
+                  key={vr.key}
                   className={cn(
-                    "border-t hover:bg-muted/30 transition-colors",
-                    ri % 2 === 0 ? "bg-background" : "bg-muted/10",
+                    "absolute left-0 right-0 flex border-b hover:bg-muted/20 transition-colors",
+                    vr.index % 2 !== 0 ? "bg-muted/10" : "bg-background",
                   )}
+                  style={{ top: vr.start, height: vr.size }}
                 >
-                  {/* Student name cell — sticky */}
-                  <td className="sticky left-0 z-10 px-4 py-2.5 border-r bg-inherit">
-                    <div className="font-medium truncate max-w-[165px]" title={row.student_name}>
-                      {row.student_name}
+                  {/* Sticky student cell */}
+                  <div
+                    className="sticky left-0 z-10 flex flex-col justify-center px-4 border-r shrink-0 bg-inherit"
+                    style={{ width: STICKY_COL_W }}
+                  >
+                    <div
+                      className="text-sm font-medium truncate"
+                      title={flatRow.student_name}
+                    >
+                      {flatRow.student_name}
                     </div>
-                    <div className="text-xs text-muted-foreground truncate max-w-[165px]">
-                      {row.student_email}
+                    <div className="text-xs text-muted-foreground truncate">
+                      {flatRow.student_email}
                     </div>
-                  </td>
+                  </div>
 
-                  {/* Score cells */}
-                  {data.assignments.map((a) => {
-                    const entry = studentGrades?.get(a.id);
-                    const isEditing =
-                      editCell?.studentId === row.student_id &&
-                      editCell?.gradeId === (entry?.grade_id ?? "");
-
-                    if (!entry) {
+                  {/* Virtual data cells */}
+                  <div
+                    className="relative flex-1"
+                    style={{ width: totalColWidth }}
+                  >
+                    {virtualCols.map((vc) => {
+                      const asgn = assignments[vc.index];
+                      if (!asgn) return null;
+                      const entry = flatRow.gradesByAssignment.get(asgn.id);
                       return (
-                        <td key={a.id} className="px-3 py-2.5 border-r last:border-r-0 text-muted-foreground text-xs">
-                          —
-                        </td>
-                      );
-                    }
-
-                    return (
-                      <td
-                        key={a.id}
-                        className="px-3 py-2.5 border-r last:border-r-0"
-                        onClick={() => {
-                          if (!isEditing) {
-                            setEditCell({
-                              studentId: row.student_id,
-                              gradeId: entry.grade_id,
-                              value: String(entry.score),
-                            });
-                          }
-                        }}
-                      >
-                        {isEditing ? (
-                          <Input
-                            autoFocus
-                            type="number"
-                            min={0}
-                            max={entry.max_score}
-                            step={0.5}
-                            className="h-7 w-20 px-2 text-xs"
-                            value={editCell?.value ?? ""}
-                            onChange={(e) =>
-                              setEditCell((prev) =>
-                                prev ? { ...prev, value: e.target.value } : prev,
-                              )
-                            }
-                            onBlur={commitEdit}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") commitEdit();
-                              if (e.key === "Escape") setEditCell(null);
-                            }}
+                        <div
+                          key={vc.key}
+                          className="absolute top-0 flex items-center px-3 border-r"
+                          style={{
+                            left: vc.start,
+                            width: vc.size,
+                            height: vr.size,
+                          }}
+                        >
+                          <GradeCell
+                            entry={entry}
+                            studentId={flatRow.student_id}
+                            assignmentId={asgn.id}
+                            editCell={editCell}
+                            setEditCell={setEditCell}
+                            onCommit={handleCommit}
                           />
-                        ) : (
-                          <span
-                            className={cn(
-                              "cursor-pointer rounded px-1.5 py-0.5 text-xs hover:bg-muted transition-colors",
-                              entry.score / entry.max_score < 0.6
-                                ? "text-destructive font-medium"
-                                : "text-foreground",
-                            )}
-                          >
-                            {entry.score}/{entry.max_score}
-                          </span>
-                        )}
-                      </td>
-                    );
-                  })}
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                  {/* Total */}
-                  <td className="px-3 py-2.5 font-medium">
+                  {/* Sticky total cell */}
+                  <div
+                    className="sticky right-0 flex flex-col justify-center px-3 border-l bg-inherit shrink-0"
+                    style={{ width: TOTAL_COL_W }}
+                  >
                     <span
                       className={cn(
-                        "text-xs",
+                        "text-xs font-semibold",
                         pct < 60
                           ? "text-destructive"
                           : pct >= 90
@@ -278,19 +560,20 @@ export default function GradebookPage() {
                     >
                       {pct}%
                     </span>
-                    <div className="text-[10px] text-muted-foreground">
-                      {Math.round(earned * 10) / 10}/{max}
-                    </div>
-                  </td>
-                </tr>
+                    <span className="text-[10px] text-muted-foreground">
+                      {Math.round(flatRow.totalEarned * 10) / 10}/
+                      {flatRow.totalMax}
+                    </span>
+                  </div>
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        </div>
 
-        {students.length === 0 && (
+        {rows.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-10">
-            No enrolled students found.
+            {globalFilter ? "No students match your search." : "No enrolled students found."}
           </p>
         )}
       </div>

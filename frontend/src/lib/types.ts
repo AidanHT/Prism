@@ -89,7 +89,10 @@ export interface SubmissionResponse {
 // ── Quizzes ───────────────────────────────────────────────────────────────────
 
 export interface QuizQuestionOptions {
-  choices: string[];
+  /** Choices for multiple_choice questions. */
+  choices?: string[];
+  /** Term/definition pairs for matching questions. */
+  pairs?: Array<{ term: string; definition: string }>;
 }
 
 export interface QuizQuestionResponse {
@@ -143,6 +146,8 @@ export interface GradeResponse {
   score: number;
   max_score: number;
   grader_id: string | null;
+  /** Instructor feedback HTML — mirrors GradeBase.feedback in the backend schema. */
+  feedback: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -175,6 +180,71 @@ export interface GradebookResponse {
   course_id: string;
   assignments: GradebookAssignment[];
   students: GradebookStudentRow[];
+}
+
+// ── Messages ──────────────────────────────────────────────────────────────────
+
+export interface MessageRecipientResponse {
+  id: string;
+  message_id: string;
+  recipient_id: string;
+  read_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageResponse {
+  id: string;
+  sender_id: string;
+  subject: string;
+  body: string;
+  course_id: string | null;
+  recipients: MessageRecipientResponse[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | "grade_published"
+  | "announcement"
+  | "message"
+  | "deadline_reminder"
+  | "submission_received";
+
+export interface NotificationResponse {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  is_read: boolean;
+  link: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+
+export interface UserSearchResult {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatar_url: string | null;
+}
+
+export interface UserMeResponse {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatar_url: string | null;
+  bio: string | null;
+  timezone: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // ── File upload ───────────────────────────────────────────────────────────────

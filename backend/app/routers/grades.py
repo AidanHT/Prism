@@ -5,12 +5,16 @@ Provides:
 - Professor gradebook view (all students × all grades) – fetched with
   batched SELECT IN queries to avoid any N+1 problem.
 - Generic grade create / update endpoints.
+- CSV export of the gradebook (streaming response).
 """
 from __future__ import annotations
 
+import csv
+import io
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -165,6 +169,84 @@ async def get_gradebook(
         course_id=course_id,
         assignments=assignment_entries,
         students=student_rows,
+    )
+
+
+# ── Gradebook CSV export ──────────────────────────────────────────────────────
+
+
+@router.get(
+    "/courses/{course_id}/gradebook/export",
+    summary="Export gradebook as CSV",
+)
+async def export_gradebook_csv(
+    course_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """
+    Stream a CSV file with one row per student and one column per assignment.
+
+    Columns: Student Name, Email, <assignment titles…>, Total Earned,
+    Total Possible, Percentage.
+    """
+    course_row = await db.execute(select(Course).where(Course.id == course_id))
+    if course_row.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found.")
+
+    enr_result = await db.execute(
+        select(Enrollment)
+        .where(Enrollment.course_id == course_id)
+        .options(selectinload(Enrollment.user), selectinload(Enrollment.grades))
+    )
+    enrollments = enr_result.scalars().all()
+
+    asgn_result = await db.execute(
+        select(Assignment).where(Assignment.course_id == course_id)
+    )
+    assignments = asgn_result.scalars().all()
+
+    # Build CSV in memory
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+
+    header = (
+        ["Student Name", "Email"]
+        + [a.title for a in assignments]
+        + ["Total Earned", "Total Possible", "Percentage"]
+    )
+    writer.writerow(header)
+
+    for enr in sorted(enrollments, key=lambda e: e.user.name):
+        grade_map = {g.assignment_id: g for g in enr.grades if g.assignment_id}
+        row_scores: list[str] = []
+        total_earned = 0.0
+        total_possible = 0.0
+        for a in assignments:
+            grade = grade_map.get(a.id)
+            if grade:
+                row_scores.append(f"{grade.score}/{grade.max_score}")
+                total_earned += grade.score
+                total_possible += grade.max_score
+            else:
+                row_scores.append("")
+
+        pct = round((total_earned / total_possible * 100), 1) if total_possible > 0 else 0
+        writer.writerow(
+            [enr.user.name, enr.user.email]
+            + row_scores
+            + [total_earned, total_possible, f"{pct}%"]
+        )
+
+    csv_bytes = buf.getvalue().encode("utf-8")
+
+    return StreamingResponse(
+        iter([csv_bytes]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="gradebook_{course_id}.csv"',
+            "Content-Length": str(len(csv_bytes)),
+        },
     )
 
 
