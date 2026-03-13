@@ -188,6 +188,7 @@ function ReplyComposer({
   const editor = useEditor({
     extensions: [StarterKit],
     content: "",
+    immediatelyRender: false,
     editorProps: {
       attributes: {
         class:
