@@ -363,12 +363,17 @@ export const forumApi = {
     ),
 
   addToBrain: (
-    payload: { thread_id: string; author_role: "professor" | "ta" },
+    payload: { thread_id: string },
+    role: "professor" | "ta",
     opts: ApiOptions,
   ) =>
-    post<{ doc_id: string; message: string }>(
+    request<{ doc_id: string; message: string }>(
       "/forum/add-to-brain",
-      payload,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "X-User-Role": role },
+      },
       opts,
     ),
 } as const;

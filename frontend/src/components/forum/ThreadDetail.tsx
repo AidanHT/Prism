@@ -104,7 +104,8 @@ function PostCard({
     try {
       const role = user.role.toLowerCase() as "professor" | "ta";
       const result = await forumApi.addToBrain(
-        { thread_id: thread.id, author_role: role },
+        { thread_id: thread.id },
+        role,
         { userId: user.id },
       );
       toast.success("Added to Brain", { description: result.message });

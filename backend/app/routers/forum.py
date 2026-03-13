@@ -13,9 +13,9 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Header, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
 from pydantic import Field
 
@@ -303,7 +303,6 @@ class TaEvaluation(AppBaseModel):
 
 class AddToBrainRequest(AppBaseModel):
     thread_id: str
-    author_role: Literal["professor", "ta"]
 
 
 class AddToBrainResponse(AppBaseModel):
@@ -497,15 +496,23 @@ async def ta_check(payload: TaCheckRequest) -> TaEvaluation:
     status_code=status.HTTP_200_OK,
     summary="Upsert a stellar forum post into the authoritative RAG knowledge base",
 )
-async def add_to_brain(payload: AddToBrainRequest) -> AddToBrainResponse:
+async def add_to_brain(
+    payload: AddToBrainRequest,
+    x_user_role: str | None = Header(default=None, alias="X-User-Role"),
+) -> AddToBrainResponse:
     """Knowledge-base auto-update (restricted to professor and TA roles).
+
+    The caller's role is read from the ``X-User-Role`` request header (set by
+    the Next.js frontend from the auth store).  The role is NOT trusted from
+    the request body to prevent students from self-elevating privileges.
 
     Fetches the target thread and all its posts, concatenates the Q&A content,
     generates a Titan embedding, and performs a live UPSERT into the OpenSearch
     index with ``is_authoritative: True``.  Subsequent RAG queries will
     immediately see this document as a professor-approved source.
     """
-    if payload.author_role not in ("professor", "ta"):
+    caller_role = (x_user_role or "").strip().lower()
+    if caller_role not in ("professor", "ta"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only professors and TAs may add content to the knowledge base.",
