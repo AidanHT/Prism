@@ -9,12 +9,12 @@ class Settings(BaseSettings):
     )
 
     # AWS
-    AWS_REGION: str
+    AWS_REGION: str = "us-east-1"
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
 
     # Database
-    DATABASE_URL: str  # asyncpg DSN e.g. postgresql+asyncpg://user:pass@host/db
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/prism"
 
     # DynamoDB
     DYNAMODB_TABLE_FORUM: str = "prism-forum"
@@ -32,4 +32,4 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
 
-settings = Settings()  # type: ignore[call-arg]
+settings = Settings()

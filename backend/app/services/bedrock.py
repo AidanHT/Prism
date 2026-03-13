@@ -3,7 +3,6 @@
 All Bedrock API calls in the application must go through this module.
 """
 
-import json
 from typing import Any
 
 import boto3
@@ -18,7 +17,7 @@ def get_bedrock_client() -> BedrockRuntimeClient:
     """Return a lazily-initialised Bedrock runtime client (singleton)."""
     global _client
     if _client is None:
-        _client = boto3.client(  # type: ignore[assignment]
+        _client = boto3.client(
             "bedrock-runtime",
             region_name=settings.AWS_REGION,
         )

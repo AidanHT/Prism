@@ -16,12 +16,17 @@ A comprehensive, layered technology stack for the cloud-native intelligent LMS. 
 | Animation | **Framer Motion** | Layout animations for the Bubble View transitions and page routing |
 | 3D / Canvas | **Three.js + React Three Fiber** | Powers the Bubble View semantic cluster visualization |
 | Charts / Dashboards | **Recharts** + **D3.js** | Recharts for standard analytics; D3 for custom force-directed cluster graphs |
+| Data Tables | **TanStack Table v8** | Headless table engine for the Gradebook (sorting, filtering, virtualized rows, sticky columns) |
+| Calendar | **FullCalendar v6** | Full-featured calendar component (month/week/day views); integrates with React; handles event rendering, drag-and-drop, and date navigation |
+| Date Utilities | **date-fns** | Lightweight, tree-shakeable date manipulation; formatting, relative time ('Due in 3 days'), timezone handling |
+| PDF Viewer | **react-pdf** (PDF.js) | In-browser PDF rendering for the SpeedGrader submission viewer and course file previews |
 | Data Fetching | **TanStack Query v5** | Server-state cache, background refetch, stale-while-revalidate |
 | Global State | **Zustand** | Lightweight, no boilerplate; scoped stores per feature domain |
 | Real-Time Client | **Socket.io Client** | Forum live updates, chat, notification toasts |
 | Forms | **React Hook Form** + **Zod** | Schema-validated forms, minimal re-renders |
-| Rich Text Editor | **TipTap** (ProseMirror-based) | Assignment submissions, forum posts, instructor announcements |
+| Rich Text Editor | **TipTap** (ProseMirror-based) | Assignment submissions, forum posts, instructor announcements, wiki pages |
 | File Upload | **Uppy** | Chunked multipart upload directly to S3 presigned URLs |
+| Drag and Drop | **@dnd-kit/core** | Accessible drag-and-drop for module reordering, quiz question reordering, and matching question types |
 | i18n | **next-intl** | ICU message format, locale-aware routing |
 | Accessibility | **axe-core** + **eslint-plugin-jsx-a11y** | WCAG 2.1 AA compliance enforced at lint time |
 
@@ -199,6 +204,8 @@ A comprehensive, layered technology stack for the cloud-native intelligent LMS. 
 | Instructor Analytics Dashboard | **Amazon QuickSight** (embedded) | Native Athena integration; per-seat licensing avoids BI server management |
 | Custom Bubble View | **Three.js + React Three Fiber + D3-Force** | Force-directed graph with semantic cluster positioning from OpenSearch k-NN |
 | Grade Distribution | **Recharts** | Histogram, boxplot, time-series views built into the gradebook UI |
+| Gradebook | **TanStack Table v8** + **Custom React components** | Spreadsheet-style gradebook with inline editing, sticky columns, CSV export |
+| Calendar Views | **FullCalendar v6** | Month, week, day, and agenda views for global and per-course calendars |
 | Predictive Score Cards | **Custom React components + TanStack Table** | At-risk student lists with sortable engagement metrics |
 
 ---
