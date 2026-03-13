@@ -80,11 +80,11 @@ cd frontend
 pnpm dev
 ```
 
-| Service | URL |
-|---|---|
-| Backend API | `http://localhost:8000` |
+| Service            | URL                              |
+| ------------------ | -------------------------------- |
+| Backend API        | `http://localhost:8000`          |
 | API Docs (Swagger) | `http://localhost:8000/api/docs` |
-| Frontend | `http://localhost:3000` |
+| Frontend           | `http://localhost:3000`          |
 
 ---
 
@@ -92,13 +92,13 @@ pnpm dev
 
 Copy `.env.example` to `backend/.env` and fill in the required values:
 
-| Variable | Description |
-|---|---|
-| `AWS_REGION` | AWS region (e.g., `us-east-1`) |
-| `DATABASE_URL` | asyncpg DSN (`postgresql+asyncpg://user:pass@host/db`) |
-| `AWS_ACCESS_KEY_ID` | AWS access key (use IAM roles in production) |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key (use IAM roles in production) |
-| `FRONTEND_ORIGIN` | Next.js dev server origin (default `http://localhost:3000`) |
+| Variable                | Description                                                 |
+| ----------------------- | ----------------------------------------------------------- |
+| `AWS_REGION`            | AWS region (e.g., `us-east-1`)                              |
+| `DATABASE_URL`          | asyncpg DSN (`postgresql+asyncpg://user:pass@host/db`)      |
+| `AWS_ACCESS_KEY_ID`     | AWS access key (use IAM roles in production)                |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key (use IAM roles in production)                |
+| `FRONTEND_ORIGIN`       | Next.js dev server origin (default `http://localhost:3000`) |
 
 ---
 
@@ -127,10 +127,41 @@ Copy `.env.example` to `backend/.env` and fill in the required values:
 
 ## Tooling
 
-| Tool | Purpose |
-|---|---|
-| `ruff` | Linting and formatting (configured in `pyproject.toml`) |
-| `mypy --strict` | Static type checking |
-| `pytest` | Test runner |
-| `alembic` | Database migrations |
-| `uv` | Fast dependency installation (run inside `prism-dev` Conda env) |
+| Tool            | Purpose                                                         |
+| --------------- | --------------------------------------------------------------- |
+| `ruff`          | Linting and formatting (configured in `pyproject.toml`)         |
+| `mypy --strict` | Static type checking                                            |
+| `pytest`        | Test runner                                                     |
+| `alembic`       | Database migrations                                             |
+| `uv`            | Fast dependency installation (run inside `prism-dev` Conda env) |
+
+---
+
+## Commit Date Rewrite Utility
+
+Use the repository script `rewrite-commit-dates.ps1` when you need to rewrite commit timestamps across all refs.
+
+### Behavior
+
+- Rewrites author and committer dates for all commits reachable from `--all` refs.
+- Assigns dates on March 13, 2026 in a randomized but chronological sequence.
+- Guarantees first commit is at 09:15:00 (local time) and last commit is at 14:45:00 (local time).
+- Keeps all intermediate commits within that same local-time window.
+- Does not push to remotes.
+
+### Usage
+
+```powershell
+# From repo root
+.\rewrite-commit-dates.ps1 -Force -AllowDirty
+```
+
+### Safety Notes
+
+- Rewriting history changes commit SHAs.
+- If you intend to publish rewritten history, force-push intentionally:
+
+```bash
+git push --force --all
+git push --force --tags
+```
