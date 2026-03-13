@@ -7,17 +7,20 @@
  *   1. Fetch threads on mount and populate the Zustand store.
  *   2. Connect to the native WebSocket at ws://<host>/api/v1/forum/live/{courseId}
  *      and optimistically add new posts as they arrive.
- *   3. Render the view-toggle (Thread / Bubble) and delegate to the correct sub-view.
- *   4. Manage the ClusterSheet open state for Bubble View clicks.
+ *   3. Render a flat segmented toggle (Thread / Bubble) with an unresolved-question
+ *      stat badge, using Framer Motion AnimatePresence for jank-free view transitions.
+ *   4. Manage the TopicSummarySheet open state for Bubble View clicks.
  *   5. Handle "New Thread" creation inline.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { AnimatePresence, motion } from "framer-motion";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
   Boxes,
+  CircleDot,
   Loader2,
   MessageSquare,
   Plus,
@@ -25,6 +28,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,13 +40,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { forumApi } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useForumStore } from "@/store/useForumStore";
 import type { ForumPost } from "@/types/forum";
 
-import { ClusterSheet } from "./ClusterSheet";
+import { TopicSummarySheet } from "./TopicSummarySheet";
 import { ThreadDetail } from "./ThreadDetail";
 import { ThreadView } from "./ThreadView";
 
@@ -160,6 +163,39 @@ function NewThreadForm({
   );
 }
 
+// ── ViewToggle ────────────────────────────────────────────────────────────────
+
+function ViewToggle({
+  view,
+  onViewChange,
+}: {
+  view: "thread" | "bubble";
+  onViewChange: (v: "thread" | "bubble") => void;
+}) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg border border-border bg-muted p-1">
+      <Button
+        size="sm"
+        variant={view === "thread" ? "default" : "ghost"}
+        className="h-7 gap-1.5 px-3 text-xs"
+        onClick={() => onViewChange("thread")}
+      >
+        <MessageSquare className="h-3.5 w-3.5" />
+        Thread View
+      </Button>
+      <Button
+        size="sm"
+        variant={view === "bubble" ? "default" : "ghost"}
+        className="h-7 gap-1.5 px-3 text-xs"
+        onClick={() => onViewChange("bubble")}
+      >
+        <Boxes className="h-3.5 w-3.5" />
+        Bubble View
+      </Button>
+    </div>
+  );
+}
+
 // ── DiscussionsClient ─────────────────────────────────────────────────────────
 
 interface DiscussionsClientProps {
@@ -178,12 +214,18 @@ export function DiscussionsClient({ courseId }: DiscussionsClientProps) {
   const setActiveThreadId = useForumStore((s) => s.setActiveThreadId);
   const activeClusterId = useForumStore((s) => s.activeClusterId);
   const setActiveClusterId = useForumStore((s) => s.setActiveClusterId);
+  const posts = useForumStore((s) => s.posts);
 
   const [loading, setLoading] = useState(true);
   const [showNewForm, setShowNewForm] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   const activeThread = threads.find((t) => t.id === activeThreadId) ?? null;
+
+  // Derive unresolved count: threads that have no posts are considered unresolved.
+  const unresolvedCount = threads.filter(
+    (t) => (posts[t.id] ?? []).length === 0,
+  ).length;
 
   // ── Load threads ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -193,7 +235,6 @@ export function DiscussionsClient({ courseId }: DiscussionsClientProps) {
       .listThreads(courseId, { userId: user.id })
       .then(setThreads)
       .catch(() => {
-        // Backend unavailable — start with empty list.
         setThreads([]);
       })
       .finally(() => setLoading(false));
@@ -222,7 +263,6 @@ export function DiscussionsClient({ courseId }: DiscussionsClientProps) {
       }
     };
 
-    // Send periodic pings to keep the connection alive.
     const pingInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) ws.send("ping");
     }, 25_000);
@@ -262,26 +302,25 @@ export function DiscussionsClient({ courseId }: DiscussionsClientProps) {
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <Tabs
-          value={view}
-          onValueChange={(v) => setView(v as "thread" | "bubble")}
-        >
-          <TabsList className="h-8">
-            <TabsTrigger value="thread" className="gap-1.5 text-xs px-3">
-              <MessageSquare className="h-3.5 w-3.5" />
-              Thread View
-            </TabsTrigger>
-            <TabsTrigger value="bubble" className="gap-1.5 text-xs px-3">
-              <Boxes className="h-3.5 w-3.5" />
-              Bubble View
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      <div className="flex items-center justify-between gap-3 flex-wrap rounded-lg border border-border bg-card px-4 py-3">
+        <div className="flex items-center gap-3">
+          <ViewToggle view={view} onViewChange={setView} />
+          {/* Unresolved questions stat badge */}
+          {threads.length > 0 && (
+            <div className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 py-1">
+              <CircleDot className="h-3.5 w-3.5 text-destructive" />
+              <span className="text-xs font-semibold text-foreground">
+                {unresolvedCount}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Unresolved
+              </span>
+            </div>
+          )}
+        </div>
 
         <Button
           size="sm"
-          variant="outline"
           onClick={() => {
             setShowNewForm(true);
             setActiveThreadId(null);
@@ -306,81 +345,102 @@ export function DiscussionsClient({ courseId }: DiscussionsClientProps) {
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      ) : view === "bubble" ? (
-        /* ── Bubble View ── */
-        <>
-          <Card className="relative overflow-hidden">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Boxes className="h-4 w-4 text-violet-500" />
-                Visual Concept Map
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Semantic clusters derived from thread embeddings. Node size =
-                thread volume · Glow intensity = recent activity.
-              </CardDescription>
-            </CardHeader>
-            <Separator />
-            <CardContent className="p-0">
-              <div className="relative h-[520px]">
-                <BubbleView
-                  threads={threads}
-                  onClusterClick={handleClusterClick}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <ClusterSheet
-            clusterId={activeClusterId}
-            threads={threads}
-            onClose={() => setActiveClusterId(null)}
-            onSelectThread={(id) => {
-              setView("thread");
-              setActiveThreadId(id);
-            }}
-          />
-        </>
       ) : (
-        /* ── Thread View ── */
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.6fr]">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                Discussions
-                <span className="ml-auto text-xs font-normal text-muted-foreground">
-                  {threads.length} thread{threads.length !== 1 ? "s" : ""}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <ThreadView
-                threads={threads}
-                activeThreadId={activeThreadId}
-                onSelectThread={handleSelectThread}
-                onNewThread={() => setShowNewForm(true)}
-              />
-            </CardContent>
-          </Card>
+        <AnimatePresence mode="wait">
+          {view === "bubble" ? (
+            <motion.div
+              key="bubble"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+            >
+              {/* ── Bubble View ── */}
+              <Card className="relative overflow-hidden">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <Boxes className="h-4 w-4 text-primary" />
+                    Visual Concept Map
+                    <Badge variant="secondary" className="ml-1 text-xs font-normal">
+                      {threads.length} thread{threads.length !== 1 ? "s" : ""}
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Semantic clusters derived from thread embeddings. Node size =
+                    thread volume · Glow intensity = recent activity.
+                  </CardDescription>
+                </CardHeader>
+                <Separator />
+                <CardContent className="p-0">
+                  <div className="relative h-[clamp(360px,50vh,640px)]">
+                    <BubbleView
+                      threads={threads}
+                      onClusterClick={handleClusterClick}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardContent className="p-5">
-              {activeThread ? (
-                <ThreadDetail
-                  thread={activeThread}
-                  courseId={courseId}
-                  onBack={() => setActiveThreadId(null)}
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-                  <MessageSquare className="h-10 w-10 opacity-20" />
-                  <p className="text-sm">Select a thread to read and reply</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+              <TopicSummarySheet
+                clusterId={activeClusterId}
+                threads={threads}
+                onClose={() => setActiveClusterId(null)}
+                onSelectThread={(id) => {
+                  setView("thread");
+                  setActiveThreadId(id);
+                }}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="thread"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+            >
+              {/* ── Thread View ── */}
+              <div className="grid gap-4 lg:grid-cols-[1fr_1.6fr]">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                      Discussions
+                      <span className="ml-auto text-xs font-normal text-muted-foreground">
+                        {threads.length} thread{threads.length !== 1 ? "s" : ""}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <ThreadView
+                      threads={threads}
+                      activeThreadId={activeThreadId}
+                      onSelectThread={handleSelectThread}
+                      onNewThread={() => setShowNewForm(true)}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-5">
+                    {activeThread ? (
+                      <ThreadDetail
+                        thread={activeThread}
+                        courseId={courseId}
+                        onBack={() => setActiveThreadId(null)}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                        <MessageSquare className="h-10 w-10 opacity-20" />
+                        <p className="text-sm">Select a thread to read and reply</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       )}
     </div>
   );

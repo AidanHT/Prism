@@ -56,7 +56,7 @@ function TaWarningBanner({
     <div className="flex flex-col gap-2 rounded-lg border bg-muted/60 p-3 text-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 font-semibold">
-          <ShieldCheck className="h-4 w-4 text-violet-500" />
+          <ShieldCheck className="h-4 w-4 text-primary" />
           TA Tone Check Result
         </div>
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onDismiss}>
@@ -151,7 +151,7 @@ function PostCard({
               {adding ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Brain className="h-3.5 w-3.5 text-violet-500" />
+                <Brain className="h-3.5 w-3.5 text-primary" />
               )}
               Add to Brain
             </Button>
@@ -265,7 +265,7 @@ function ReplyComposer({
             {checking ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             ) : (
-              <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-violet-500" />
+              <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-primary" />
             )}
             Run Tone Check
           </Button>

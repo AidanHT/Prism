@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 import type { ForumPost, ForumThread } from "@/types/forum";
 
@@ -30,37 +31,46 @@ interface ForumState {
   setActiveClusterId: (id: string | null) => void;
 }
 
-export const useForumStore = create<ForumState>()((set) => ({
-  view: "thread",
-  setView: (view) => set({ view }),
+export const useForumStore = create<ForumState>()(
+  persist(
+    (set) => ({
+      view: "thread",
+      setView: (view) => set({ view }),
 
-  threads: [],
-  setThreads: (threads) => set({ threads }),
-  addThread: (thread) =>
-    set((s) => ({
-      threads: s.threads.some((t) => t.id === thread.id)
-        ? s.threads
-        : [thread, ...s.threads],
-    })),
+      threads: [],
+      setThreads: (threads) => set({ threads }),
+      addThread: (thread) =>
+        set((s) => ({
+          threads: s.threads.some((t) => t.id === thread.id)
+            ? s.threads
+            : [thread, ...s.threads],
+        })),
 
-  posts: {},
-  setPosts: (threadId, posts) =>
-    set((s) => ({ posts: { ...s.posts, [threadId]: posts } })),
-  addPost: (post) =>
-    set((s) => {
-      const existing = s.posts[post.thread_id] ?? [];
-      if (existing.some((p) => p.id === post.id)) return s;
-      return {
-        posts: {
-          ...s.posts,
-          [post.thread_id]: [...existing, post],
-        },
-      };
+      posts: {},
+      setPosts: (threadId, posts) =>
+        set((s) => ({ posts: { ...s.posts, [threadId]: posts } })),
+      addPost: (post) =>
+        set((s) => {
+          const existing = s.posts[post.thread_id] ?? [];
+          if (existing.some((p) => p.id === post.id)) return s;
+          return {
+            posts: {
+              ...s.posts,
+              [post.thread_id]: [...existing, post],
+            },
+          };
+        }),
+
+      activeThreadId: null,
+      setActiveThreadId: (id) => set({ activeThreadId: id }),
+
+      activeClusterId: null,
+      setActiveClusterId: (id) => set({ activeClusterId: id }),
     }),
-
-  activeThreadId: null,
-  setActiveThreadId: (id) => set({ activeThreadId: id }),
-
-  activeClusterId: null,
-  setActiveClusterId: (id) => set({ activeClusterId: id }),
-}));
+    {
+      name: "prism-forum-view",
+      // Only persist the view preference — threads/posts are refetched on mount.
+      partialize: (state) => ({ view: state.view }),
+    },
+  ),
+);
