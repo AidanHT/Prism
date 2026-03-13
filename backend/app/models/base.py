@@ -1,11 +1,4 @@
-"""SQLAlchemy declarative base shared by all ORM models."""
+"""Re-exports Base and TimestampMixin from app.db.base for backward compatibility."""
+from app.db.base import Base, TimestampMixin
 
-from sqlalchemy.orm import DeclarativeBase
-
-
-class Base(DeclarativeBase):
-    """Project-wide declarative base.
-
-    All ORM model classes must inherit from this base so that Alembic
-    can discover them for auto-generated migrations.
-    """
+__all__ = ["Base", "TimestampMixin"]

@@ -36,40 +36,55 @@ prism/
 
 ---
 
-## Prerequisites: Conda Environment
+## Getting Started
 
-> **All developers and CI/CD pipelines must initialize and activate the `prism-dev` Conda environment before installing dependencies or running the backend.**
+> **MANDATORY: All developers must create and activate the `prism-dev` Conda environment before running the backend or installing any Python dependencies. Running `uv` or `pip` outside of the active Conda environment is not supported.**
 
 This project uses **Conda** for Python 3.12 version management and **uv** for fast package installation within that environment.
 
-### First-time setup
+### 1. Backend Setup
 
 ```bash
-# 1. Create the Conda environment (Python 3.12)
+# 1. Create the Conda environment from the repo root
 conda env create -f environment.yml
 
-# 2. Activate the environment – required before every session
+# 2. Activate — required before EVERY session
 conda activate prism-dev
 
-# 3. Install backend dependencies with uv (inside the active env)
+# 3. Install backend dependencies with uv (inside the active env only)
 cd backend
 pip install uv          # install uv into the conda env once
 uv pip install -e ".[dev]"
+
+# 4. Copy the env file and fill in required values
+cp .env.example .env
 ```
 
-### Daily workflow
+### 2. Frontend Setup
 
 ```bash
-# Always activate first
-conda activate prism-dev
-
-# Run the backend dev server
-cd backend
-uvicorn app.main:app --reload --port 8000
+cd frontend
+pnpm install
 ```
 
-The backend will be available at `http://localhost:8000`.
-Interactive API docs: `http://localhost:8000/api/docs`.
+### 3. Run the dev servers
+
+```bash
+# Terminal 1 – backend (must have conda activate prism-dev active)
+conda activate prism-dev
+cd backend
+uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 – frontend
+cd frontend
+pnpm dev
+```
+
+| Service | URL |
+|---|---|
+| Backend API | `http://localhost:8000` |
+| API Docs (Swagger) | `http://localhost:8000/api/docs` |
+| Frontend | `http://localhost:3000` |
 
 ---
 

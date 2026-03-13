@@ -8,7 +8,20 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import announcements, chatbot, courses, forum, grading
+from app.routers import (
+    announcements,
+    assignments,
+    calendar,
+    chatbot,
+    courses,
+    discussions,
+    files,
+    forum,
+    grades,
+    grading,
+    modules,
+    quizzes,
+)
 
 app = FastAPI(
     title="Prism LMS API",
@@ -36,11 +49,21 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 API_PREFIX = "/api/v1"
 
+# ── Core CRUD routers ──────────────────────────────────────────────────────
 app.include_router(courses.router, prefix=API_PREFIX)
+app.include_router(assignments.router, prefix=API_PREFIX)
+app.include_router(quizzes.router, prefix=API_PREFIX)
+app.include_router(modules.router, prefix=API_PREFIX)
+app.include_router(grades.router, prefix=API_PREFIX)
+app.include_router(discussions.router, prefix=API_PREFIX)
+app.include_router(announcements.router, prefix=API_PREFIX)
+app.include_router(files.router, prefix=API_PREFIX)
+app.include_router(calendar.router, prefix=API_PREFIX)
+
+# ── AI / async microservice routers (implemented in later phases) ──────────
 app.include_router(forum.router, prefix=API_PREFIX)
 app.include_router(grading.router, prefix=API_PREFIX)
 app.include_router(chatbot.router, prefix=API_PREFIX)
-app.include_router(announcements.router, prefix=API_PREFIX)
 
 
 @app.get("/api/health", tags=["health"])

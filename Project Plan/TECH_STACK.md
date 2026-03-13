@@ -212,8 +212,11 @@ A comprehensive, layered technology stack for the cloud-native intelligent LMS. 
 
 ## 11. Developer Experience
 
+> **Environment Mandate:** All backend development must occur inside the `prism-dev` Conda environment (`conda activate prism-dev`). The `environment.yml` in the repo root pins Python 3.12 and all backend dependencies. Never run `uv` or `pip` outside of this active environment.
+
 | Tool | Purpose |
 |---|---|
+| **Conda** | Python 3.12 version management; single source of truth for the backend runtime environment |
 | **ESLint** + **Prettier** | Opinionated code style for frontend; enforced on save and in CI |
 | **Ruff** | Extremely fast Python linter and formatter; replaces flake8, isort, black for the backend |
 | **mypy** | Strict static type checking for all Python code |

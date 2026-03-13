@@ -17,12 +17,17 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/prism"
 
     # DynamoDB
+    DYNAMODB_ENDPOINT_URL: str | None = None  # e.g. "http://localhost:8000" for DynamoDB Local
     DYNAMODB_TABLE_FORUM: str = "prism-forum"
+    DYNAMODB_TABLE_FORUM_POSTS: str = "prism-forum-posts"
     DYNAMODB_TABLE_SESSIONS: str = "prism-sessions"
 
     # Bedrock model IDs
     BEDROCK_MODEL_COMPLEX: str = "claude-opus-4-6"
     BEDROCK_MODEL_FAST: str = "claude-haiku-4-5-20251001"
+
+    # S3
+    S3_FILES_BUCKET: str = "prism-files"
 
     # CORS
     FRONTEND_ORIGIN: str = "http://localhost:3000"

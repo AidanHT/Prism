@@ -16,7 +16,7 @@ class AppBaseModel(BaseModel):
     )
 
 
-class MessageResponse(AppBaseModel):
+class OkResponse(AppBaseModel):
     """Generic success response carrying a human-readable message."""
 
     message: str
