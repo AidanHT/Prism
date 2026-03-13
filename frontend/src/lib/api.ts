@@ -18,10 +18,14 @@ import type {
   EnrollmentResponse,
   GradebookResponse,
   GradeResponse,
+  MessageResponse,
+  NotificationResponse,
   QuizAttemptResponse,
   QuizResponse,
   SubmissionResponse,
   UploadUrlResponse,
+  UserMeResponse,
+  UserSearchResult,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -236,4 +240,67 @@ export const calendarApi = {
       `/calendar?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`,
       opts,
     ),
+} as const;
+
+/** Direct messaging endpoints. */
+export const messageApi = {
+  list: (opts: ApiOptions) => get<MessageResponse[]>("/messages", opts),
+
+  get: (messageId: string, opts: ApiOptions) =>
+    get<MessageResponse>(`/messages/${messageId}`, opts),
+
+  create: (
+    payload: {
+      subject: string;
+      body: string;
+      course_id?: string;
+      recipient_ids: string[];
+    },
+    opts: ApiOptions,
+  ) => post<MessageResponse>("/messages", payload, opts),
+
+  reply: (messageId: string, payload: { body: string }, opts: ApiOptions) =>
+    post<MessageResponse>(`/messages/${messageId}/reply`, payload, opts),
+
+  markRead: (messageId: string, opts: ApiOptions) =>
+    request<void>(`/messages/${messageId}/read`, { method: "PATCH" }, opts),
+} as const;
+
+/** Notification endpoints. */
+export const notificationApi = {
+  list: (opts: ApiOptions) =>
+    get<NotificationResponse[]>("/notifications", opts),
+
+  markAllRead: (opts: ApiOptions) =>
+    request<void>("/notifications/read-all", { method: "PATCH" }, opts),
+
+  markRead: (notificationId: string, opts: ApiOptions) =>
+    request<NotificationResponse>(
+      `/notifications/${notificationId}`,
+      { method: "PATCH" },
+      opts,
+    ),
+} as const;
+
+/** User profile and search endpoints. */
+export const userApi = {
+  me: (opts: ApiOptions) => get<UserMeResponse>("/users/me", opts),
+
+  patch: (
+    payload: {
+      name?: string;
+      bio?: string;
+      timezone?: string;
+      avatar_url?: string;
+    },
+    opts: ApiOptions,
+  ) =>
+    request<UserMeResponse>(
+      "/users/me",
+      { method: "PATCH", body: JSON.stringify(payload) },
+      opts,
+    ),
+
+  search: (q: string, opts: ApiOptions) =>
+    get<UserSearchResult[]>(`/users/search?q=${encodeURIComponent(q)}`, opts),
 } as const;

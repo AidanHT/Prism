@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "boto3>=1.34.0",
+    "python-socketio[asyncio_client]>=5.11.0",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +63,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "botocore.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "socketio.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
