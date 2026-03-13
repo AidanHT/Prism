@@ -43,7 +43,7 @@ import { Separator } from "@/components/ui/separator";
 import { forumApi } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useForumStore } from "@/store/useForumStore";
-import type { ForumPost } from "@/types/forum";
+import type { ClusterNode, ForumPost } from "@/types/forum";
 
 import { TopicSummarySheet } from "./TopicSummarySheet";
 import { ThreadDetail } from "./ThreadDetail";
@@ -219,6 +219,8 @@ export function DiscussionsClient({ courseId }: DiscussionsClientProps) {
 
   const [loading, setLoading] = useState(true);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [clusters, setClusters] = useState<ClusterNode[]>([]);
+  const [clustersLoading, setClustersLoading] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   const activeThread = threads.find((t) => t.id === activeThreadId) ?? null;
@@ -240,6 +242,29 @@ export function DiscussionsClient({ courseId }: DiscussionsClientProps) {
       })
       .finally(() => setLoading(false));
   }, [courseId, user, setThreads]);
+
+  // ── Load clusters when switching to Bubble View ──────────────────────────
+  useEffect(() => {
+    if (view !== "bubble" || !user) return;
+    setClustersLoading(true);
+    forumApi
+      .getClusters(courseId, { userId: user.id })
+      .then((data) => {
+        setClusters(
+          data.map((c) => ({
+            cluster_id: c.cluster_id,
+            representative_topic: c.representative_topic,
+            frequency_weight: c.frequency_weight,
+            threads: c.threads,
+            x: c.x,
+            y: c.y,
+            z: c.z,
+          })),
+        );
+      })
+      .catch(() => setClusters([]))
+      .finally(() => setClustersLoading(false));
+  }, [view, courseId, user]);
 
   // ── WebSocket – real-time new_post events ─────────────────────────────────
   useEffect(() => {
@@ -363,7 +388,7 @@ export function DiscussionsClient({ courseId }: DiscussionsClientProps) {
                     <Boxes className="h-4 w-4 text-primary" />
                     Visual Concept Map
                     <Badge variant="secondary" className="ml-1 text-xs font-normal">
-                      {threads.length} thread{threads.length !== 1 ? "s" : ""}
+                      {clusters.length} cluster{clusters.length !== 1 ? "s" : ""}
                     </Badge>
                   </CardTitle>
                   <CardDescription className="text-xs">
@@ -374,17 +399,22 @@ export function DiscussionsClient({ courseId }: DiscussionsClientProps) {
                 <Separator />
                 <CardContent className="p-0">
                   <div className="relative h-[clamp(360px,50vh,640px)]">
-                    <BubbleView
-                      threads={threads}
-                      onClusterClick={handleClusterClick}
-                    />
+                    {clustersLoading ? (
+                      <BubbleViewSkeleton />
+                    ) : (
+                      <BubbleView
+                        clusters={clusters}
+                        onClusterClick={handleClusterClick}
+                      />
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
               <TopicSummarySheet
                 clusterId={activeClusterId}
-                threads={threads}
+                clusters={clusters}
+                courseId={courseId}
                 onClose={() => setActiveClusterId(null)}
                 onSelectThread={(id) => {
                   setView("thread");

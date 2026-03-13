@@ -28,11 +28,15 @@ import {
 } from "@/components/ui/sheet";
 import { forumApi } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
-import type { ForumThread } from "@/types/forum";
+import type { ClusterNode, ClusterThreadSummary } from "@/types/forum";
 
 // ── Streaming summary hook ────────────────────────────────────────────────────
 
-function useClusterSummary(clusterId: string | null, threads: ForumThread[]) {
+function useClusterSummary(
+  clusterId: string | null,
+  threads: ClusterThreadSummary[],
+  courseId: string,
+) {
   const [summary, setSummary] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
@@ -57,7 +61,7 @@ function useClusterSummary(clusterId: string | null, threads: ForumThread[]) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question,
-        course_id: threads[0]?.course_id ?? "unknown",
+        course_id: courseId,
         author_id: "system-summary",
         k: 5,
       }),
@@ -100,7 +104,7 @@ function useClusterSummary(clusterId: string | null, threads: ForumThread[]) {
       .finally(() => setLoading(false));
 
     return () => ctrl.abort();
-  }, [clusterId, threads]);
+  }, [clusterId, threads, courseId]);
 
   return { summary, loading };
 }
@@ -109,25 +113,29 @@ function useClusterSummary(clusterId: string | null, threads: ForumThread[]) {
 
 interface TopicSummarySheetProps {
   clusterId: string | null;
-  threads: ForumThread[];
+  clusters: ClusterNode[];
+  courseId: string;
   onClose: () => void;
   onSelectThread: (threadId: string) => void;
 }
 
 export function TopicSummarySheet({
   clusterId,
-  threads,
+  clusters,
+  courseId,
   onClose,
   onSelectThread,
 }: TopicSummarySheetProps) {
   const user = useAuthStore((s) => s.user);
   const [addingToBrain, setAddingToBrain] = useState(false);
 
-  const clusterThreads = clusterId
-    ? threads.filter((t) => (t.cluster_id ?? t.id) === clusterId)
-    : [];
+  const activeCluster = clusterId
+    ? clusters.find((c) => c.cluster_id === clusterId) ?? null
+    : null;
 
-  const { summary, loading } = useClusterSummary(clusterId, clusterThreads);
+  const clusterThreads = activeCluster?.threads ?? [];
+
+  const { summary, loading } = useClusterSummary(clusterId, clusterThreads, courseId);
 
   const canAddToBrain =
     user?.role === "Professor" || user?.role === "TA";
@@ -161,7 +169,7 @@ export function TopicSummarySheet({
           <div className="flex items-start justify-between gap-3">
             <SheetTitle className="flex items-center gap-2 text-base leading-tight">
               <Brain className="h-4 w-4 shrink-0 text-primary" />
-              Topic Summary
+              {activeCluster?.representative_topic ?? "Topic Summary"}
               <Badge variant="secondary" className="ml-1 text-xs font-normal">
                 {clusterThreads.length} thread
                 {clusterThreads.length !== 1 ? "s" : ""}

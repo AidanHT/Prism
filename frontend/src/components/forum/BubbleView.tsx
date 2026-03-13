@@ -3,10 +3,8 @@
 /**
  * BubbleView – 3D Visual Concept Map rendered with React Three Fiber.
  *
- * - Groups ForumThreads by cluster_id into ClusterNodes.
- * - Runs a D3-Force simulation (client-side, settles before first paint) to
- *   calculate spread positions, then maps them into 3D space with Z depth.
- * - Node radius  ∝ thread count in the cluster.
+ * Receives pre-computed ClusterNode[] from the server (GET /forum/clusters).
+ * - Node radius  ∝ frequency_weight (normalised 0-1 from thread count).
  * - Node glow    ∝ recency of the most-recently-created thread in the cluster.
  * - MeshPhysicalMaterial provides clearcoat gloss + emissive glow on hot nodes.
  * - drei <Html> renders flat, no-gradient tooltip overlays on hover.
@@ -16,7 +14,6 @@
  */
 
 import {
-  useEffect,
   useRef,
   useState,
   useCallback,
@@ -25,63 +22,11 @@ import {
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
-import * as d3 from "d3";
+import { useEffect } from "react";
 
-import type { ClusterNode, ForumThread } from "@/types/forum";
+import type { ClusterNode } from "@/types/forum";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Build ClusterNodes from a flat thread list, settling positions with D3. */
-function buildClusterNodes(threads: ForumThread[]): ClusterNode[] {
-  const map = new Map<string, ForumThread[]>();
-  for (const t of threads) {
-    const key = t.cluster_id ?? t.id;
-    const bucket = map.get(key) ?? [];
-    bucket.push(t);
-    map.set(key, bucket);
-  }
-
-  const nodes: (ClusterNode & d3.SimulationNodeDatum & { z: number })[] =
-    Array.from(map.entries()).map(([cluster_id, clusterThreads]) => ({
-      cluster_id,
-      threads: clusterThreads,
-      x: (Math.random() - 0.5) * 200,
-      y: (Math.random() - 0.5) * 200,
-      z: (Math.random() - 0.5) * 2, // shallow Z spread for depth parallax
-    }));
-
-  if (nodes.length === 0) return [];
-
-  const radiusFn = (n: (typeof nodes)[0]) =>
-    Math.max(0.6, Math.sqrt(n.threads.length)) * 1.2 + 0.5;
-
-  const sim = d3
-    .forceSimulation(nodes)
-    .force("charge", d3.forceManyBody().strength(-120))
-    .force("center", d3.forceCenter(0, 0))
-    .force("x", d3.forceX(0).strength(0.05))
-    .force("y", d3.forceY(0).strength(0.05))
-    .force(
-      "collision",
-      d3.forceCollide<(typeof nodes)[0]>().radius((n) => radiusFn(n) * 35 + 15),
-    )
-    .stop();
-
-  const iterations = Math.ceil(
-    Math.log(sim.alphaMin()) / Math.log(1 - sim.alphaDecay()),
-  );
-  for (let i = 0; i < iterations; i++) sim.tick();
-
-  return nodes.map((n) => ({
-    cluster_id: n.cluster_id,
-    threads: n.threads,
-    x: n.x ?? 0,
-    y: n.y ?? 0,
-  }));
-}
-
-/** Map a D3 pixel position to Three.js world units. */
-const WORLD_SCALE = 0.04;
 
 /**
  * Map recency (0 = old, 1 = brand-new) to a rich emissive color ramp.
@@ -94,13 +39,28 @@ function recencyColor(t: number): THREE.Color {
   return new THREE.Color(r, g, b);
 }
 
-/** Derive a short, readable label from the cluster_id or thread titles. */
+/** Derive a short, readable label from the representative_topic. */
 function clusterLabel(node: ClusterNode): string {
-  if (node.threads.length > 0) {
-    const title = node.threads[0].title;
-    return title.length > 36 ? title.slice(0, 33) + "…" : title;
-  }
-  return node.cluster_id.slice(0, 8);
+  const topic = node.representative_topic;
+  return topic.length > 36 ? topic.slice(0, 33) + "…" : topic;
+}
+
+/** Compute per-node recency (0-1) from thread created_at timestamps. */
+function buildRecencyMap(nodes: ClusterNode[]): Map<string, number> {
+  if (nodes.length === 0) return new Map();
+
+  const maxTimes = nodes.map((n) =>
+    Math.max(...n.threads.map((t) => new Date(t.created_at).getTime())),
+  );
+  const globalMin = Math.min(...maxTimes);
+  const globalMax = Math.max(...maxTimes);
+  const range = globalMax - globalMin || 1;
+
+  const rMap = new Map<string, number>();
+  nodes.forEach((n, i) => {
+    rMap.set(n.cluster_id, (maxTimes[i] - globalMin) / range);
+  });
+  return rMap;
 }
 
 // ── BubbleNode mesh ──────────────────────────────────────────────────────────
@@ -108,18 +68,16 @@ function clusterLabel(node: ClusterNode): string {
 interface BubbleNodeProps {
   node: ClusterNode;
   recency: number; // 0-1
-  zOffset: number;
   onClick: (clusterId: string) => void;
 }
 
-function BubbleNode({ node, recency, zOffset, onClick }: BubbleNodeProps) {
+function BubbleNode({ node, recency, onClick }: BubbleNodeProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const matRef = useRef<THREE.MeshPhysicalMaterial>(null);
   const [hovered, setHovered] = useState(false);
 
-  const radius = Math.max(0.3, Math.sqrt(node.threads.length)) * 0.6 + 0.2;
-  const x = node.x * WORLD_SCALE;
-  const y = node.y * WORLD_SCALE;
+  // Radius derived from server-provided frequency_weight (0-1).
+  const radius = 0.3 + node.frequency_weight * 0.9;
   const baseColor = recencyColor(recency);
   const baseEmissive = 0.3 + recency * 1.4;
   const isHot = recency > 0.6;
@@ -137,7 +95,7 @@ function BubbleNode({ node, recency, zOffset, onClick }: BubbleNodeProps) {
   return (
     <mesh
       ref={meshRef}
-      position={[x, y, zOffset]}
+      position={[node.x, node.y, node.z]}
       onClick={(e) => {
         e.stopPropagation();
         onClick(node.cluster_id);
@@ -219,7 +177,6 @@ function BubbleNode({ node, recency, zOffset, onClick }: BubbleNodeProps) {
 interface SceneGroupProps {
   nodes: ClusterNode[];
   recencyMap: Map<string, number>;
-  zOffsets: Map<string, number>;
   onClusterClick: (id: string) => void;
   dragState: React.MutableRefObject<{
     active: boolean;
@@ -233,7 +190,6 @@ interface SceneGroupProps {
 function SceneGroup({
   nodes,
   recencyMap,
-  zOffsets,
   onClusterClick,
   dragState,
 }: SceneGroupProps) {
@@ -255,7 +211,6 @@ function SceneGroup({
           key={node.cluster_id}
           node={node}
           recency={recencyMap.get(node.cluster_id) ?? 0}
-          zOffset={zOffsets.get(node.cluster_id) ?? 0}
           onClick={onClusterClick}
         />
       ))}
@@ -275,14 +230,12 @@ function CameraSetup() {
 // ── Public component ─────────────────────────────────────────────────────────
 
 interface BubbleViewProps {
-  threads: ForumThread[];
+  clusters: ClusterNode[];
   onClusterClick: (clusterId: string) => void;
 }
 
-export function BubbleView({ threads, onClusterClick }: BubbleViewProps) {
-  const [nodes, setNodes] = useState<ClusterNode[]>([]);
-  const [recencyMap, setRecencyMap] = useState<Map<string, number>>(new Map());
-  const [zOffsets, setZOffsets] = useState<Map<string, number>>(new Map());
+export function BubbleView({ clusters, onClusterClick }: BubbleViewProps) {
+  const recencyMap = buildRecencyMap(clusters);
 
   const dragState = useRef({
     active: false,
@@ -291,28 +244,6 @@ export function BubbleView({ threads, onClusterClick }: BubbleViewProps) {
     rotX: 0,
     rotY: 0,
   });
-
-  useEffect(() => {
-    const built = buildClusterNodes(threads);
-    setNodes(built);
-
-    const maxTimes = built.map((n) =>
-      Math.max(...n.threads.map((t) => new Date(t.created_at).getTime())),
-    );
-    const globalMin = Math.min(...maxTimes);
-    const globalMax = Math.max(...maxTimes);
-    const range = globalMax - globalMin || 1;
-
-    const rMap = new Map<string, number>();
-    const zMap = new Map<string, number>();
-    built.forEach((n, i) => {
-      rMap.set(n.cluster_id, (maxTimes[i] - globalMin) / range);
-      // Spread Z so nodes at different depths create parallax
-      zMap.set(n.cluster_id, (Math.random() - 0.5) * 2.5);
-    });
-    setRecencyMap(rMap);
-    setZOffsets(zMap);
-  }, [threads]);
 
   const onPointerDown = useCallback((e: PointerEvent<HTMLDivElement>) => {
     dragState.current.active = true;
@@ -334,7 +265,7 @@ export function BubbleView({ threads, onClusterClick }: BubbleViewProps) {
     dragState.current.active = false;
   }, []);
 
-  if (nodes.length === 0) {
+  if (clusters.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
         <p className="text-sm">No clusters yet — post a question to seed the map.</p>
@@ -357,9 +288,8 @@ export function BubbleView({ threads, onClusterClick }: BubbleViewProps) {
         <pointLight position={[-5, -4, -5]} intensity={0.8} color="#4466ff" />
         <pointLight position={[0, -6, 4]} intensity={0.4} color="#ffffff" />
         <SceneGroup
-          nodes={nodes}
+          nodes={clusters}
           recencyMap={recencyMap}
-          zOffsets={zOffsets}
           onClusterClick={onClusterClick}
           dragState={dragState}
         />

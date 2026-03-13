@@ -15,11 +15,32 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_SESSION_TOKEN: str | None = None  # Required for temporary credentials (SSO, assume-role)
 
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/prism"
-
     # DynamoDB
     DYNAMODB_ENDPOINT_URL: str | None = None  # e.g. "http://localhost:8000" for DynamoDB Local
+
+    # ── DynamoDB table names ──────────────────────────────────────────────────
+    DYNAMODB_TABLE_USERS: str = "prism-users"
+    DYNAMODB_TABLE_COURSES: str = "prism-courses"
+    DYNAMODB_TABLE_ENROLLMENTS: str = "prism-enrollments"
+    DYNAMODB_TABLE_ASSIGNMENTS: str = "prism-assignments"
+    DYNAMODB_TABLE_SUBMISSIONS: str = "prism-submissions"
+    DYNAMODB_TABLE_GRADES: str = "prism-grades"
+    DYNAMODB_TABLE_QUIZZES: str = "prism-quizzes"
+    DYNAMODB_TABLE_QUIZ_QUESTIONS: str = "prism-quiz-questions"
+    DYNAMODB_TABLE_QUIZ_ATTEMPTS: str = "prism-quiz-attempts"
+    DYNAMODB_TABLE_DISCUSSIONS: str = "prism-discussions"
+    DYNAMODB_TABLE_DISCUSSION_REPLIES: str = "prism-discussion-replies"
+    DYNAMODB_TABLE_ANNOUNCEMENTS: str = "prism-announcements"
+    DYNAMODB_TABLE_MODULES: str = "prism-modules"
+    DYNAMODB_TABLE_MODULE_ITEMS: str = "prism-module-items"
+    DYNAMODB_TABLE_PAGES: str = "prism-pages"
+    DYNAMODB_TABLE_COURSE_FILES: str = "prism-course-files"
+    DYNAMODB_TABLE_RUBRICS: str = "prism-rubrics"
+    DYNAMODB_TABLE_RUBRIC_CRITERIA: str = "prism-rubric-criteria"
+    DYNAMODB_TABLE_CALENDAR_EVENTS: str = "prism-calendar-events"
+    DYNAMODB_TABLE_MESSAGES: str = "prism-messages"
+    DYNAMODB_TABLE_MESSAGE_RECIPIENTS: str = "prism-message-recipients"
+    DYNAMODB_TABLE_NOTIFICATIONS: str = "prism-notifications"
     DYNAMODB_TABLE_FORUM: str = "prism-forum"
     DYNAMODB_TABLE_FORUM_POSTS: str = "prism-forum-posts"
     DYNAMODB_TABLE_SESSIONS: str = "prism-sessions"

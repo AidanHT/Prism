@@ -25,7 +25,7 @@ from app.db.dynamo import dynamo_manager
 from app.db.session import get_session
 from app.schemas.base import AppBaseModel
 from app.schemas.dynamo import ForumPost, ForumThread
-from app.services.bedrock import invoke_model_complex, invoke_model_complex_stream_async
+from app.services.bedrock import invoke_model_complex, invoke_model_fast_stream_async
 from app.services.pgvector_service import (
     search_authoritative_threads,
     search_similar_threads,
@@ -126,6 +126,36 @@ class SemanticSearchHit(AppBaseModel):
     title: str
     content: str
     score: float = Field(..., alias="_score")
+
+
+class ClusterThreadSummary(AppBaseModel):
+    """Minimal thread representation inside a cluster response."""
+    id: str
+    title: str
+    created_at: datetime
+
+
+class ForumClusterResponse(AppBaseModel):
+    """A single semantic cluster returned by ``GET /forum/clusters``."""
+    cluster_id: str
+    representative_topic: str = Field(
+        ..., description="Short label summarising the cluster theme"
+    )
+    frequency_weight: float = Field(
+        ..., ge=0, description="Normalised weight (0-1) proportional to thread count"
+    )
+    x: float = Field(..., description="Suggested X position for 3D visualisation")
+    y: float = Field(..., description="Suggested Y position for 3D visualisation")
+    z: float = Field(..., description="Suggested Z position for depth parallax")
+    threads: list[ClusterThreadSummary]
+
+
+class ClusterSummaryResponse(AppBaseModel):
+    """AI-synthesised summary for a specific cluster."""
+    cluster_id: str
+    representative_topic: str
+    summary: str
+    thread_count: int
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +317,87 @@ async def semantic_search(
 
 
 # ---------------------------------------------------------------------------
+# Semantic clustering
+# ---------------------------------------------------------------------------
+
+
+def _build_clusters(threads: list[dict[str, Any]]) -> list[ForumClusterResponse]:
+    """Group threads by cluster_id and compute mock k-NN spatial layout.
+
+    Simulates OpenSearch k-NN by:
+    1. Grouping threads sharing a ``cluster_id`` (falling back to the thread's
+       own ``id`` as a singleton cluster).
+    2. Assigning ``frequency_weight`` proportional to cluster size.
+    3. Spreading clusters in 3D space using a deterministic hash-based layout
+       that mimics cosine-distance proximity (threads in the same cluster are
+       co-located; different clusters are separated).
+
+    In production this will be replaced by a real OpenSearch k-NN aggregation.
+    """
+    import hashlib
+    import math
+
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for t in threads:
+        key = t.get("cluster_id") or t["id"]
+        buckets.setdefault(key, []).append(t)
+
+    max_size = max((len(v) for v in buckets.values()), default=1)
+    clusters: list[ForumClusterResponse] = []
+
+    for idx, (cluster_id, bucket) in enumerate(buckets.items()):
+        # Deterministic spatial position derived from cluster_id hash.
+        digest = hashlib.sha256(cluster_id.encode()).hexdigest()
+        angle = (int(digest[:8], 16) / 0xFFFFFFFF) * 2 * math.pi
+        radius = 3.0 + (int(digest[8:16], 16) / 0xFFFFFFFF) * 4.0
+        x = math.cos(angle) * radius
+        y = math.sin(angle) * radius
+        z = ((int(digest[16:24], 16) / 0xFFFFFFFF) - 0.5) * 2.5
+
+        # Representative topic: use the title of the earliest thread in the cluster.
+        sorted_bucket = sorted(bucket, key=lambda t: t.get("created_at", ""))
+        rep_title = sorted_bucket[0].get("title", cluster_id[:8])
+
+        cluster_threads = [
+            ClusterThreadSummary(
+                id=t["id"],
+                title=t.get("title", ""),
+                created_at=t.get("created_at", datetime.utcnow()),
+            )
+            for t in sorted_bucket
+        ]
+
+        clusters.append(
+            ForumClusterResponse(
+                cluster_id=cluster_id,
+                representative_topic=rep_title,
+                frequency_weight=len(bucket) / max_size,
+                x=x,
+                y=y,
+                z=z,
+                threads=cluster_threads,
+            )
+        )
+
+    return clusters
+
+
+@router.get(
+    "/clusters",
+    response_model=list[ForumClusterResponse],
+    summary="Return semantic clusters for a course's forum threads (mock k-NN)",
+)
+async def get_clusters(course_id: str) -> list[ForumClusterResponse]:
+    """Fetch all threads for *course_id*, group by cluster_id, and return
+    spatially-laid-out clusters with frequency weights for the Bubble View.
+    """
+    items = await dynamo_manager.query_forum_threads_by_course(course_id)
+    if not items:
+        return []
+    return _build_clusters(items)
+
+
+# ---------------------------------------------------------------------------
 # AI intelligence schemas
 # ---------------------------------------------------------------------------
 
@@ -355,7 +466,7 @@ async def ask_question(
     1. Runs cosine-distance search to find conceptually similar threads.
     2. Assigns a ``cluster_id`` (Megathread) when similarity > threshold.
     3. Creates a new ``ForumThread`` in DynamoDB with the resolved cluster.
-    4. Streams a Claude Opus 4.6-synthesised answer back as SSE.
+    4. Streams a Claude Haiku 4.5-synthesised answer back as SSE.
 
     SSE event format::
 
@@ -423,7 +534,7 @@ async def ask_question(
         )
         yield f"data: {metadata}\n\n"
 
-        async for chunk in invoke_model_complex_stream_async(
+        async for chunk in invoke_model_fast_stream_async(
             messages=messages,
             system=_ASK_SYSTEM_PROMPT,
         ):

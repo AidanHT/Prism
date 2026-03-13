@@ -29,12 +29,45 @@ export interface AddToBrainResponse {
   message: string;
 }
 
-/** Derived from ForumThread[] — one node per semantic cluster in the Bubble View. */
+/** Minimal thread summary returned inside a ForumClusterResponse. */
+export interface ClusterThreadSummary {
+  id: string;
+  title: string;
+  created_at: string;
+}
+
+/** Server-side semantic cluster returned by GET /forum/clusters. */
+export interface ForumClusterResponse {
+  cluster_id: string;
+  representative_topic: string;
+  frequency_weight: number;
+  x: number;
+  y: number;
+  z: number;
+  threads: ClusterThreadSummary[];
+}
+
+/** AI-synthesised summary for a specific cluster. */
+export interface ClusterSummaryResponse {
+  cluster_id: string;
+  representative_topic: string;
+  summary: string;
+  thread_count: number;
+}
+
+/**
+ * Client-side cluster node used by BubbleView for D3/Three.js rendering.
+ * Derived from ForumClusterResponse with full ForumThread objects attached.
+ */
 export interface ClusterNode {
   cluster_id: string;
-  threads: ForumThread[];
-  /** Settled D3-Force X position (pixels, centred on 0). */
+  representative_topic: string;
+  frequency_weight: number;
+  threads: ClusterThreadSummary[];
+  /** 3D X position from server (world units). */
   x: number;
-  /** Settled D3-Force Y position (pixels, centred on 0). */
+  /** 3D Y position from server (world units). */
   y: number;
+  /** 3D Z position from server (depth parallax). */
+  z: number;
 }

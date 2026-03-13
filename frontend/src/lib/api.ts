@@ -406,6 +406,19 @@ export const forumApi = {
       },
       opts,
     ),
+
+  getClusters: (courseId: string, opts: ApiOptions) =>
+    get<
+      {
+        cluster_id: string;
+        representative_topic: string;
+        frequency_weight: number;
+        x: number;
+        y: number;
+        z: number;
+        threads: { id: string; title: string; created_at: string }[];
+      }[]
+    >(`/forum/clusters?course_id=${encodeURIComponent(courseId)}`, opts),
 } as const;
 
 /** Rubric generation, calibration, and listing endpoints. */
@@ -452,6 +465,23 @@ export const gradingApi = {
     payload: { submission_id: string; rubric_id: string },
     opts: ApiOptions,
   ) => post<EvaluateResponse>("/grading/evaluate", payload, opts),
+
+  /** Save a grade with anomaly detection. Throws ApiError(409) on anomaly. */
+  save: (
+    payload: {
+      grade_id: string;
+      score: number;
+      feedback?: string;
+      ai_suggested_score?: number;
+      grader_id?: string;
+    },
+    opts: ApiOptions,
+  ) =>
+    post<{ id: string; score: number; max_score: number; feedback: string | null; anomaly_flagged: boolean }>(
+      "/grading/save",
+      payload,
+      opts,
+    ),
 } as const;
 
 /** User profile and search endpoints. */

@@ -1,28 +1,29 @@
-"""Users microservice router – profile management and user search.
+"""Users microservice router -- profile management and user search.
 
 Provides:
-- ``GET /users/me``         → current user's profile
-- ``PATCH /users/me``       → update display name, bio, timezone, avatar
-- ``GET /users/search``     → autocomplete search for message recipients
+- ``GET /users/me``         -> current user's profile
+- ``PATCH /users/me``       -> update display name, bio, timezone, avatar
+- ``GET /users/search``     -> autocomplete search for message recipients
+
+All persistence is backed by DynamoDB via ``dynamo_manager``.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import ConfigDict, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user, get_db
-from app.models.user import User
+from app.api.dependencies import get_current_user
+from app.db.dynamo import dynamo_manager
 from app.schemas.base import AppBaseModel
 
 router = APIRouter(tags=["users"])
 
 
-# ── Inline schemas (profile-specific, not shared with other domains) ──────────
+# -- Inline schemas (profile-specific, not shared with other domains) ----------
 
 
 class UserSearchResult(AppBaseModel):
@@ -56,11 +57,13 @@ class UserPatch(AppBaseModel):
     avatar_url: str | None = Field(None, max_length=2048)
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+# -- Endpoints -----------------------------------------------------------------
 
 
 @router.get("/users/me", response_model=UserMeResponse)
-async def get_me(current_user: User = Depends(get_current_user)) -> User:
+async def get_me(
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     """Return the authenticated user's profile."""
     return current_user
 
@@ -68,31 +71,26 @@ async def get_me(current_user: User = Depends(get_current_user)) -> User:
 @router.patch("/users/me", response_model=UserMeResponse)
 async def patch_me(
     payload: UserPatch,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> User:
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     """Update the authenticated user's profile fields."""
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(current_user, field, value)
-    await db.flush()
-    await db.refresh(current_user)
-    return current_user
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return current_user
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    updated = await dynamo_manager.update_user(current_user["id"], updates)
+    if updated is None:
+        # Shouldn't happen for an authenticated user, but handle gracefully
+        return current_user
+    return updated
 
 
 @router.get("/users/search", response_model=list[UserSearchResult])
 async def search_users(
     q: str = Query(..., min_length=1, description="Name or email prefix"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> list[User]:
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> list[dict[str, Any]]:
     """Full-text prefix search over name and email for compose autocomplete."""
-    like = f"%{q}%"
-    result = await db.execute(
-        select(User)
-        .where(
-            (User.name.ilike(like)) | (User.email.ilike(like)),
-            User.id != current_user.id,
-        )
-        .limit(10)
-    )
-    return list(result.scalars().all())
+    results = await dynamo_manager.search_users(q, limit=10)
+    # Exclude the current user from results
+    return [u for u in results if u.get("id") != current_user["id"]]

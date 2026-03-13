@@ -13,11 +13,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import func
+
 from app.api.dependencies import get_current_user, get_db
 from app.models.assignment import Submission
+from app.models.grade import Grade
 from app.models.rubric import Rubric
 from app.models.user import User
-from app.schemas.grading import EvaluateRequest, EvaluateResponse
+from app.schemas.grading import EvaluateRequest, EvaluateResponse, GradeSaveRequest
 from app.services.grading_pipeline import (
     format_rubric_for_evaluation,
     run_grading_pipeline,
@@ -82,6 +85,105 @@ async def evaluate_submission(
         rubric_id=body.rubric_id,
         evaluation=evaluation,
     )
+
+
+# ── Save with anomaly detection ───────────────────────────────────────────────
+
+_ANOMALY_THRESHOLD = 0.15
+
+
+def check_grade_anomaly(
+    proposed_score: float,
+    ai_score: float | None,
+    class_average: float | None,
+    max_score: float,
+    threshold: float = _ANOMALY_THRESHOLD,
+) -> bool:
+    """Return True when the proposed grade deviates beyond *threshold* from the
+    AI baseline or the class average (both expressed as fractions of max_score).
+    """
+    if max_score <= 0:
+        return False
+    proposed_pct = proposed_score / max_score
+    if class_average is not None and abs(proposed_pct - class_average) > threshold:
+        return True
+    if ai_score is not None:
+        ai_pct = ai_score / max_score
+        if abs(proposed_pct - ai_pct) > threshold:
+            return True
+    return False
+
+
+@router.post(
+    "/save",
+    status_code=status.HTTP_200_OK,
+    summary="Save a grade with anomaly detection",
+)
+async def save_grade(
+    body: GradeSaveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Persist the grader's score and feedback.
+
+    If the score deviates significantly from the class average or the AI
+    suggestion, return a **409 Conflict** with ``anomaly_flagged: true``
+    instead of saving, forcing the frontend to confirm.
+
+    The frontend may re-submit with ``?force=true`` to bypass the check.
+    """
+    result = await db.execute(select(Grade).where(Grade.id == body.grade_id))
+    grade = result.scalar_one_or_none()
+    if grade is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grade not found.")
+
+    # Compute class average for same assignment (excluding this grade).
+    class_avg: float | None = None
+    if grade.assignment_id is not None and grade.max_score > 0:
+        avg_result = await db.execute(
+            select(func.avg(Grade.score / Grade.max_score)).where(
+                Grade.assignment_id == grade.assignment_id,
+                Grade.id != grade.id,
+                Grade.max_score > 0,
+            )
+        )
+        class_avg = avg_result.scalar_one_or_none()
+
+    anomaly = check_grade_anomaly(
+        proposed_score=body.score,
+        ai_score=body.ai_suggested_score,
+        class_average=class_avg,
+        max_score=grade.max_score,
+    )
+
+    if anomaly:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "anomaly_flagged": True,
+                "message": (
+                    "This grade deviates significantly from the class average "
+                    "and/or AI suggestion. Please confirm before saving."
+                ),
+            },
+        )
+
+    # No anomaly — persist.
+    grade.score = body.score
+    if body.feedback is not None:
+        grade.feedback = body.feedback
+    if body.grader_id is not None:
+        grade.grader_id = body.grader_id
+    await db.flush()
+    await db.refresh(grade)
+
+    return {
+        "id": str(grade.id),
+        "score": grade.score,
+        "max_score": grade.max_score,
+        "feedback": grade.feedback,
+        "anomaly_flagged": False,
+    }
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────

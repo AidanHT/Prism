@@ -21,11 +21,14 @@ interface AuthState {
   setRole: (role: UserRole) => void;
 }
 
-/** Seed user so the UI is immediately visible in development. */
+/**
+ * Seed user so the UI is immediately visible in development.
+ * Must match a deterministic UUID from `backend/app/db/seed.py` (`_stable_id`).
+ */
 const MOCK_USER: AuthUser = {
-  id: "dev-001",
-  email: "dev@prism.local",
-  name: "Dev User",
+  id: "92833cf6-36aa-5263-9cfe-334b230a1540",
+  email: "s.chen@university.edu",
+  name: "Dr. Sarah Chen",
   role: "Professor",
 };
 
@@ -49,6 +52,9 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "prism-auth",
+      // Bump version whenever the MOCK_USER changes so stale localStorage
+      // (e.g. old "dev-001") is automatically replaced with the new defaults.
+      version: 2,
       // Only persist the token and user — not derived state.
       partialize: (state) => ({ user: state.user, token: state.token }),
       // Re-derive isAuthenticated on rehydration.

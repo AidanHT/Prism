@@ -11,7 +11,16 @@ from __future__ import annotations
 import asyncio
 import random
 from datetime import datetime, timedelta, timezone
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
+
+
+# Deterministic UUID generator — same email/code always yields the same UUID,
+# so the frontend can hardcode a known dev-user ID and the seed is idempotent.
+_NS = NAMESPACE_URL
+
+
+def _stable_id(key: str) -> UUID:
+    return uuid5(_NS, f"prism:{key}")
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,7 +81,7 @@ def _make_users() -> list[User]:
     return [
         # ── Professors ────────────────────────────────────────────────────────
         User(
-            id=uuid4(),
+            id=_stable_id("s.chen@university.edu"),
             email="s.chen@university.edu",
             name="Dr. Sarah Chen",
             role=UserRole.professor,
@@ -84,7 +93,7 @@ def _make_users() -> list[User]:
             password_hash=pw,
         ),
         User(
-            id=uuid4(),
+            id=_stable_id("m.williams@university.edu"),
             email="m.williams@university.edu",
             name="Dr. Marcus Williams",
             role=UserRole.professor,
@@ -97,7 +106,7 @@ def _make_users() -> list[User]:
         ),
         # ── Teaching Assistants ───────────────────────────────────────────────
         User(
-            id=uuid4(),
+            id=_stable_id("j.patel@university.edu"),
             email="j.patel@university.edu",
             name="Jaspreet Patel",
             role=UserRole.ta,
@@ -106,7 +115,7 @@ def _make_users() -> list[User]:
             password_hash=pw,
         ),
         User(
-            id=uuid4(),
+            id=_stable_id("l.nguyen@university.edu"),
             email="l.nguyen@university.edu",
             name="Linh Nguyen",
             role=UserRole.ta,
@@ -116,7 +125,7 @@ def _make_users() -> list[User]:
         ),
         # ── Students ──────────────────────────────────────────────────────────
         User(
-            id=uuid4(),
+            id=_stable_id("alex.morrison@student.edu"),
             email="alex.morrison@student.edu",
             name="Alex Morrison",
             role=UserRole.student,
@@ -124,7 +133,7 @@ def _make_users() -> list[User]:
             password_hash=pw,
         ),
         User(
-            id=uuid4(),
+            id=_stable_id("priya.sharma@student.edu"),
             email="priya.sharma@student.edu",
             name="Priya Sharma",
             role=UserRole.student,
@@ -132,7 +141,7 @@ def _make_users() -> list[User]:
             password_hash=pw,
         ),
         User(
-            id=uuid4(),
+            id=_stable_id("carlos.reyes@student.edu"),
             email="carlos.reyes@student.edu",
             name="Carlos Reyes",
             role=UserRole.student,
@@ -140,7 +149,7 @@ def _make_users() -> list[User]:
             password_hash=pw,
         ),
         User(
-            id=uuid4(),
+            id=_stable_id("emma.johnson@student.edu"),
             email="emma.johnson@student.edu",
             name="Emma Johnson",
             role=UserRole.student,
@@ -148,7 +157,7 @@ def _make_users() -> list[User]:
             password_hash=pw,
         ),
         User(
-            id=uuid4(),
+            id=_stable_id("noah.kim@student.edu"),
             email="noah.kim@student.edu",
             name="Noah Kim",
             role=UserRole.student,
@@ -156,7 +165,7 @@ def _make_users() -> list[User]:
             password_hash=pw,
         ),
         User(
-            id=uuid4(),
+            id=_stable_id("isabella.torres@student.edu"),
             email="isabella.torres@student.edu",
             name="Isabella Torres",
             role=UserRole.student,
@@ -164,7 +173,7 @@ def _make_users() -> list[User]:
             password_hash=pw,
         ),
         User(
-            id=uuid4(),
+            id=_stable_id("liam.oconnor@student.edu"),
             email="liam.oconnor@student.edu",
             name="Liam O'Connor",
             role=UserRole.student,
@@ -172,7 +181,7 @@ def _make_users() -> list[User]:
             password_hash=pw,
         ),
         User(
-            id=uuid4(),
+            id=_stable_id("zoe.washington@student.edu"),
             email="zoe.washington@student.edu",
             name="Zoe Washington",
             role=UserRole.student,
@@ -190,7 +199,7 @@ def _make_courses(prof1: User, prof2: User) -> list[Course]:
     shared_scheme = {"A": 90, "B": 80, "C": 70, "D": 60}
     return [
         Course(
-            id=uuid4(),
+            id=_stable_id("CS301"),
             title="CS 301 Data Structures",
             code="CS301",
             term="Spring 2026",
@@ -204,7 +213,7 @@ def _make_courses(prof1: User, prof2: User) -> list[Course]:
             late_policy=shared_late,
         ),
         Course(
-            id=uuid4(),
+            id=_stable_id("ECE243"),
             title="ECE 243 Computer Organization",
             code="ECE243",
             term="Spring 2026",
@@ -218,7 +227,7 @@ def _make_courses(prof1: User, prof2: User) -> list[Course]:
             late_policy=shared_late,
         ),
         Course(
-            id=uuid4(),
+            id=_stable_id("MATH240"),
             title="MATH 240 Linear Algebra",
             code="MATH240",
             term="Spring 2026",

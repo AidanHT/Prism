@@ -165,3 +165,21 @@ async def invoke_model_complex_stream_async(
         temperature=temperature,
     ):
         yield chunk
+
+
+async def invoke_model_fast_stream_async(
+    *,
+    messages: list[dict[str, Any]],
+    system: str | None = None,
+    max_tokens: int = 1024,
+    temperature: float = 0.5,
+) -> AsyncIterator[str]:
+    """Stream tokens from Claude Haiku 4.5 for high-volume, low-latency tasks."""
+    async for chunk in invoke_model_stream_async(
+        model_id=settings.BEDROCK_MODEL_FAST,
+        messages=messages,
+        system=system,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    ):
+        yield chunk

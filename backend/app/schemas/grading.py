@@ -39,6 +39,18 @@ class EvaluationResult(AppBaseModel):
     )
 
 
+class GradeSaveRequest(AppBaseModel):
+    """Request body for POST /grading/save."""
+
+    grade_id: UUID = Field(..., description="ID of the existing Grade row to update.")
+    score: float = Field(..., ge=0.0, description="Score awarded by the grader.")
+    feedback: str | None = Field(None, description="Optional HTML feedback for the student.")
+    ai_suggested_score: float | None = Field(
+        None, ge=0.0, description="AI-suggested score for anomaly comparison."
+    )
+    grader_id: UUID | None = Field(None, description="UUID of the grading user.")
+
+
 class EvaluateRequest(AppBaseModel):
     """Request body for POST /grading/evaluate."""
 
