@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_SESSION_TOKEN: str | None = None  # Required for temporary credentials (SSO, assume-role)
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/prism"
@@ -36,6 +37,8 @@ class Settings(BaseSettings):
     OPENSEARCH_PASSWORD: str = "admin"
     OPENSEARCH_USE_SSL: bool = False
     OPENSEARCH_FORUM_INDEX: str = "prism-forum-embeddings"
+    # Set to True for OpenSearch Serverless (uses IAM SigV4 auth instead of basic auth)
+    OPENSEARCH_SERVERLESS: bool = False
 
     # S3
     S3_FILES_BUCKET: str = "prism-files"
