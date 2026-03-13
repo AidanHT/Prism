@@ -6,6 +6,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
     )
 
     # AWS
@@ -28,14 +29,6 @@ class Settings(BaseSettings):
 
     # Forum AI settings
     FORUM_SIMILARITY_THRESHOLD: float = 0.75
-
-    # OpenSearch (Vector Engine)
-    OPENSEARCH_HOST: str = "localhost"
-    OPENSEARCH_PORT: int = 9200
-    OPENSEARCH_USERNAME: str = "admin"
-    OPENSEARCH_PASSWORD: str = "admin"
-    OPENSEARCH_USE_SSL: bool = False
-    OPENSEARCH_FORUM_INDEX: str = "prism-forum-embeddings"
 
     # S3
     S3_FILES_BUCKET: str = "prism-files"

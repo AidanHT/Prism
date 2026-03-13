@@ -7,6 +7,7 @@ from app.models.calendar import CalendarEvent  # noqa: F401
 from app.models.content import Announcement, CourseFile, Page  # noqa: F401
 from app.models.course import Course, Enrollment, Module, ModuleItem  # noqa: F401
 from app.models.discussion import Discussion, DiscussionReply  # noqa: F401
+from app.models.forum_embedding import ForumEmbedding  # noqa: F401
 from app.models.grade import Grade  # noqa: F401
 from app.models.message import Message, MessageRecipient  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
@@ -37,4 +38,5 @@ __all__ = [
     "Message",
     "MessageRecipient",
     "Notification",
+    "ForumEmbedding",
 ]

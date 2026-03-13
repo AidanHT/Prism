@@ -1,7 +1,7 @@
 """Forum microservice router.
 
 Handles forum threads, posts, real-time WebSocket broadcasting, and
-AI-powered semantic search via OpenSearch k-NN.
+AI-powered semantic search via pgvector cosine-distance queries.
 
 WebSocket endpoint (simulating API Gateway WebSocket API):
     ws://api/v1/forum/live/{course_id}
@@ -15,20 +15,22 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, Header, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
 from pydantic import Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.dynamo import dynamo_manager
+from app.db.session import get_session
 from app.schemas.base import AppBaseModel
 from app.schemas.dynamo import ForumPost, ForumThread
 from app.services.bedrock import invoke_model_complex, invoke_model_complex_stream_async
-from app.services.opensearch import (
-    index_forum_thread,
+from app.services.pgvector_service import (
     search_authoritative_threads,
     search_similar_threads,
     upsert_authoritative_document,
+    upsert_forum_thread,
 )
 
 router = APIRouter(prefix="/forum", tags=["forum"])
@@ -145,13 +147,17 @@ async def health() -> dict[str, str]:
     "/threads",
     response_model=ThreadResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a forum thread and index it into OpenSearch",
+    summary="Create a forum thread and index it into pgvector",
 )
-async def create_thread(payload: CreateThreadRequest) -> ThreadResponse:
+async def create_thread(
+    payload: CreateThreadRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ThreadResponse:
     thread_id = str(uuid.uuid4())
 
-    # Embed title + content and index into OpenSearch Vector Engine.
-    embedding_id = await index_forum_thread(
+    # Embed title + content and upsert into the pgvector forum_embeddings table.
+    embedding_id = await upsert_forum_thread(
+        session,
         thread_id=thread_id,
         course_id=payload.course_id,
         cluster_id=payload.cluster_id,
@@ -261,14 +267,18 @@ async def list_posts(thread_id: str) -> list[PostResponse]:
 @router.post(
     "/search",
     response_model=list[SemanticSearchHit],
-    summary="k-NN semantic search for conceptually similar forum threads",
+    summary="Cosine-distance semantic search for conceptually similar forum threads",
 )
-async def semantic_search(payload: SemanticSearchRequest) -> list[SemanticSearchHit]:
-    """Embed the student's question with Titan and run an OpenSearch k-NN query.
+async def semantic_search(
+    payload: SemanticSearchRequest,
+    session: AsyncSession = Depends(get_session),
+) -> list[SemanticSearchHit]:
+    """Embed the student's question with Titan and run a pgvector cosine-distance query.
 
     Returns up to *k* threads ranked by vector proximity.
     """
     hits = await search_similar_threads(
+        session,
         payload.question,
         k=payload.k,
         course_id=payload.course_id,
@@ -336,10 +346,13 @@ Return no other text outside the JSON object.
     "/ask",
     summary="Submit a student question: cluster, then stream a RAG-synthesized answer",
 )
-async def ask_question(payload: AskRequest) -> StreamingResponse:
+async def ask_question(
+    payload: AskRequest,
+    session: AsyncSession = Depends(get_session),
+) -> StreamingResponse:
     """Semantic clustering + streaming AI answer pipeline.
 
-    1. Runs k-NN search to find conceptually similar threads.
+    1. Runs cosine-distance search to find conceptually similar threads.
     2. Assigns a ``cluster_id`` (Megathread) when similarity > threshold.
     3. Creates a new ``ForumThread`` in DynamoDB with the resolved cluster.
     4. Streams a Claude Opus 4.6-synthesised answer back as SSE.
@@ -351,6 +364,7 @@ async def ask_question(payload: AskRequest) -> StreamingResponse:
         data: [DONE]
     """
     similar_hits = await search_similar_threads(
+        session,
         payload.question,
         k=payload.k,
         course_id=payload.course_id,
@@ -367,7 +381,8 @@ async def ask_question(payload: AskRequest) -> StreamingResponse:
 
     # Persist the new question as a thread so it participates in future searches.
     thread_id = str(uuid.uuid4())
-    embedding_id = await index_forum_thread(
+    embedding_id = await upsert_forum_thread(
+        session,
         thread_id=thread_id,
         course_id=payload.course_id,
         cluster_id=cluster_id,
@@ -429,11 +444,14 @@ async def ask_question(payload: AskRequest) -> StreamingResponse:
     response_model=TaEvaluation,
     summary="Evaluate a TA draft against professor-authoritative context via Claude Opus 4.6",
 )
-async def ta_check(payload: TaCheckRequest) -> TaEvaluation:
+async def ta_check(
+    payload: TaCheckRequest,
+    session: AsyncSession = Depends(get_session),
+) -> TaEvaluation:
     """TA tone and accuracy checker.
 
     Fetches the original thread from DynamoDB, retrieves authoritative
-    professor answers from OpenSearch, then asks Claude Opus 4.6 to return a
+    professor answers from pgvector, then asks Claude Opus 4.6 to return a
     structured JSON evaluation of the TA's draft.
     """
     thread = await dynamo_manager.get_forum_thread(payload.thread_id)
@@ -443,6 +461,7 @@ async def ta_check(payload: TaCheckRequest) -> TaEvaluation:
     question_text = thread.get("title", "")
 
     authoritative_hits = await search_authoritative_threads(
+        session,
         question_text,
         k=payload.k,
         course_id=payload.course_id,
@@ -498,6 +517,7 @@ async def ta_check(payload: TaCheckRequest) -> TaEvaluation:
 )
 async def add_to_brain(
     payload: AddToBrainRequest,
+    session: AsyncSession = Depends(get_session),
     x_user_role: str | None = Header(default=None, alias="X-User-Role"),
 ) -> AddToBrainResponse:
     """Knowledge-base auto-update (restricted to professor and TA roles).
@@ -507,9 +527,9 @@ async def add_to_brain(
     the request body to prevent students from self-elevating privileges.
 
     Fetches the target thread and all its posts, concatenates the Q&A content,
-    generates a Titan embedding, and performs a live UPSERT into the OpenSearch
-    index with ``is_authoritative: True``.  Subsequent RAG queries will
-    immediately see this document as a professor-approved source.
+    generates a Titan embedding, and performs a live UPSERT into the pgvector
+    ``forum_embeddings`` table with ``is_authoritative = true``.  Subsequent
+    RAG queries will immediately see this document as a professor-approved source.
     """
     caller_role = (x_user_role or "").strip().lower()
     if caller_role not in ("professor", "ta"):
@@ -528,6 +548,7 @@ async def add_to_brain(
     answer_body = "\n\n".join(p.get("content", "") for p in posts if p.get("content"))
 
     doc_id = await upsert_authoritative_document(
+        session,
         thread_id=payload.thread_id,
         course_id=thread["course_id"],
         cluster_id=thread.get("cluster_id"),
