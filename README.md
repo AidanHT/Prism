@@ -1,61 +1,121 @@
-Project Description: Project Prism – Cloud-Native Intelligent LMS Architecture
-Executive Summary
-Project Prism outlines the engineering architecture for a next-generation Learning Management System (LMS) enhanced by an event-driven AI intelligence layer. Built entirely on an AWS microservices architecture, Prism aims to solve the administrative bottleneck in higher education. It separates the static core infrastructure (data storage, access control, routing) from the dynamic AI workflows (predictive analytics, RAG-based semantic search, autonomous agentic routing), providing a highly performant, scalable solution for enterprise-level university deployments.
+# Project Prism – Cloud-Native Intelligent LMS
 
-Part 1: Core Infrastructure (The Baseline LMS)
-Prism's foundational application is designed as a decoupled, serverless web application to handle highly variable traffic loads (e.g., assignment submission deadlines, exam periods) without provisioning idle compute.
+## Executive Summary
 
-1. Frontend & Edge Delivery
+Project Prism is a next-generation Learning Management System enhanced by an event-driven AI intelligence layer. Built on AWS microservices, Prism separates static core infrastructure (data storage, access control, routing) from dynamic AI workflows (predictive analytics, RAG-based semantic search, autonomous agentic routing), providing a highly performant, scalable solution for enterprise-level university deployments.
 
-Framework: React/Next.js for a highly responsive Single Page Application (SPA).
+---
 
-Hosting & Delivery: Deployed via AWS Amplify, with static assets (CSS, JS, images) cached globally using Amazon CloudFront to ensure sub-100ms load times for the UI.
+## Repository Structure
 
-Authentication: Managed by Amazon Cognito, handling secure JWT-based role-based access control (RBAC) for Students, TAs, Instructors, and Admins.
+```
+prism/
+├── frontend/          # Next.js 15 (App Router) application
+├── backend/           # Python 3.12 / FastAPI microservices
+│   ├── app/
+│   │   ├── main.py            # FastAPI entry point & CORS config
+│   │   ├── core/
+│   │   │   └── config.py      # Pydantic Settings (env vars)
+│   │   ├── routers/           # One file per microservice boundary
+│   │   │   ├── courses.py
+│   │   │   ├── forum.py
+│   │   │   ├── grading.py
+│   │   │   ├── chatbot.py
+│   │   │   └── announcements.py
+│   │   ├── services/
+│   │   │   ├── bedrock.py     # Boto3 Bedrock client & typed helpers
+│   │   │   └── db.py          # SQLAlchemy async engine & session
+│   │   ├── models/
+│   │   │   └── base.py        # SQLAlchemy DeclarativeBase
+│   │   └── schemas/
+│   │       └── base.py        # Shared Pydantic v2 base models
+│   └── pyproject.toml         # Ruff, Mypy, and project metadata
+├── environment.yml    # Conda environment definition
+└── README.md
+```
 
-2. Backend API & Microservices
+---
 
-API Gateway: Amazon API Gateway acts as the primary entry point, routing REST and WebSocket (for real-time chat/forum updates) requests.
+## Prerequisites: Conda Environment
 
-Compute Layer: Core CRUD operations (fetching syllabus, submitting assignments) are handled by decoupled AWS Lambda functions (Node.js/Python). Heavier, asynchronous tasks (video transcoding) are offloaded to Amazon ECS (Fargate) containers.
+> **All developers and CI/CD pipelines must initialize and activate the `prism-dev` Conda environment before installing dependencies or running the backend.**
 
-3. Database & Storage Tier
+This project uses **Conda** for Python 3.12 version management and **uv** for fast package installation within that environment.
 
-Relational Database: Amazon Aurora PostgreSQL (Serverless v2) handles the highly structured, transactional data requiring ACID compliance (user profiles, gradebook ledgers, course relationships).
+### First-time setup
 
-NoSQL / Fast-Access Data: Amazon DynamoDB is utilized for high-throughput, unstructured or semi-structured data like Prism's forum threads, session states, and chat logs.
+```bash
+# 1. Create the Conda environment (Python 3.12)
+conda env create -f environment.yml
 
-Object Storage: Amazon S3 stores all course materials, lecture videos, and student file submissions.
+# 2. Activate the environment – required before every session
+conda activate prism-dev
 
-Part 2: The Intelligence Layer (AWS ML & Data Analytics)
-This layer sits on top of Prism's core infrastructure, utilizing AWS Bedrock and streaming analytics to power the platform's autonomous features.
+# 3. Install backend dependencies with uv (inside the active env)
+cd backend
+pip install uv          # install uv into the conda env once
+uv pip install -e ".[dev]"
+```
 
-1. Agentic Course Chatbot & Next-Gen Forum (RAG Pipeline)
+### Daily workflow
 
-LLM Orchestration: Amazon Bedrock serves as the central API for foundation models. For the high-speed, agentic chat and dynamic forum auto-suggestions, the pipeline utilizes Claude Opus 4.6 (via Bedrock) to provide highly capable reasoning, deep context windows, and low-latency inference.
+```bash
+# Always activate first
+conda activate prism-dev
 
-Vector Embeddings: Course materials (syllabi, transcripts, previous forum posts) are processed using Amazon Titan Embeddings and stored in Amazon OpenSearch Serverless (Vector Engine).
+# Run the backend dev server
+cd backend
+uvicorn app.main:app --reload --port 8000
+```
 
-Semantic Clustering (Bubble View): OpenSearch performs K-Nearest Neighbor (k-NN) searches to instantly group mathematically or conceptually similar student questions, passing the clusters to the frontend to render Prism's visual "Bubble View."
+The backend will be available at `http://localhost:8000`.
+Interactive API docs: `http://localhost:8000/api/docs`.
 
-2. Smart Analytics & Predictive Interventions (Data Pipeline)
+---
 
-Clickstream Ingestion: Granular user interactions (video pauses, PDF scroll depth, time-on-page) are streamed in real-time using Amazon Kinesis Data Streams.
+## Environment Variables
 
-Data Lake & ETL: Kinesis buffers the data into an S3 Data Lake. AWS Glue performs serverless ETL (Extract, Transform, Load) operations to clean and structure the behavioral data.
+Copy `.env.example` to `backend/.env` and fill in the required values:
 
-Predictive Analytics: Amazon SageMaker runs lightweight predictive models against this historical data to calculate "Resource ROI" and flag at-risk students based on engagement drop-offs, surfacing these insights to the professor's dashboard via Amazon Athena.
+| Variable | Description |
+|---|---|
+| `AWS_REGION` | AWS region (e.g., `us-east-1`) |
+| `DATABASE_URL` | asyncpg DSN (`postgresql+asyncpg://user:pass@host/db`) |
+| `AWS_ACCESS_KEY_ID` | AWS access key (use IAM roles in production) |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key (use IAM roles in production) |
+| `FRONTEND_ORIGIN` | Next.js dev server origin (default `http://localhost:3000`) |
 
-3. Grading Co-Pilot & Anomaly Detection
+---
 
-Document Parsing: Student submissions in PDF/Word format are parsed using Amazon Textract to extract text and handwriting.
+## Architecture Overview
 
-Evaluation Engine: The extracted text is sent to Bedrock. The LLM compares the submission against the dynamically generated rubric, returning baseline grading recommendations and feedback.
+### Part 1: Core Infrastructure
 
-Variance Tracking: As TAs submit grades, an AWS Lambda trigger runs a statistical variance check against historical TA grading patterns stored in Aurora, flagging anomalies before grades are published.
+- **Frontend & Edge:** Next.js 15 (App Router) on AWS Amplify + CloudFront
+- **Auth:** Amazon Cognito (JWT/RBAC – Student, TA, Instructor, Admin)
+- **API:** Amazon API Gateway → AWS Lambda (FastAPI handlers)
+- **Relational DB:** Amazon Aurora PostgreSQL Serverless v2 (ACID transactions)
+- **NoSQL:** Amazon DynamoDB (forum threads, session state, chat logs)
+- **Storage:** Amazon S3 (course materials, submissions, videos)
 
-4. Dynamic Material Synchronization (Event-Driven Updates)
+### Part 2: Intelligence Layer
 
-Event Choreography: Amazon EventBridge acts as the central event bus for Prism.
+- **LLM Orchestration:** Amazon Bedrock
+  - **Claude Opus 4.6** (`claude-opus-4-6`) – grading co-pilot, deep reasoning, RAG pipeline
+  - **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`) – forum auto-suggestions, quick summaries
+- **Vector Search:** Amazon Titan Embeddings + OpenSearch Serverless (k-NN "Bubble View")
+- **Analytics Pipeline:** Kinesis Data Streams → S3 Data Lake → AWS Glue → SageMaker
+- **Event Bus:** Amazon EventBridge (DueDateChanged fan-out, notification triggers)
+- **Document Parsing:** Amazon Textract (PDF/Word submission extraction)
 
-The "Domino Effect": If a professor publishes an announcement changing a due date, the Lambda function processing that announcement emits a DueDateChanged event to EventBridge. This triggers a fan-out to other microservices to automatically update the Aurora database (calendar view), notify the Bedrock RAG pipeline to update its vector index, and send a push notification to students via Amazon SNS.
+---
+
+## Tooling
+
+| Tool | Purpose |
+|---|---|
+| `ruff` | Linting and formatting (configured in `pyproject.toml`) |
+| `mypy --strict` | Static type checking |
+| `pytest` | Test runner |
+| `alembic` | Database migrations |
+| `uv` | Fast dependency installation (run inside `prism-dev` Conda env) |
