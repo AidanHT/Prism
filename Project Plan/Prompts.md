@@ -28,7 +28,7 @@ Finally, build a mock AuthContext using React Context to simulate Amazon Cognito
 
 ---
 
-## Phase 1.1: Core LMS Pages & Course Navigation
+## Phase 1.1: Core LMS Pages & Course Navigation (COMPLETED)
 
 **Goal:** Build out the complete frontend routing structure to mirror Canvas LMS. Every major LMS function gets its own dedicated page. Establish the course-level layout with sub-navigation so users can navigate within a course exactly as they do in Canvas.
 
@@ -112,7 +112,7 @@ Update the sidebar navigation to include links for: Dashboard, Courses, Calendar
 
 ---
 
-## Phase 2: Core Data Models, CRUD & Functional Course Pages
+## Phase 2: Core Data Models, CRUD & Functional Course Pages (COMPLETED)
 
 **Goal:** Define all relational data models, set up migrations, seed the database, and build out CRUD endpoints and functional frontend pages for the core LMS features.
 
@@ -205,7 +205,7 @@ Connect the placeholder pages from Phase 1.1 to the real API endpoints:
 
 ---
 
-## Phase 2.5: Student & Professor Core Workflows
+## Phase 2.5: Student & Professor Core Workflows (COMPLETED)
 
 **Goal:** Build the interactive workflows that students and professors use daily — assignment submission, quiz taking, gradebook management, calendar, and messaging.
 
@@ -339,11 +339,13 @@ Additionally, implement the 'Anomaly Flag' feature: when a grade is saved, compa
 
 ---
 
-## Phase 5: Event-Driven Material Synchronization
+## Roadmap (Future Implementation)
+
+### Phase 5: Event-Driven Material Synchronization
 
 **Goal:** Simulate the "Domino Effect" using EventBridge-like patterns.
 
-### Prompt 5:
+**Prompt 5:**
 
 "We need to build the 'Domino Effect' synchronization engine.
 
@@ -361,13 +363,11 @@ On the 'Create Announcement' page (built in Phase 2), add an AI-powered analysis
 
 4. Trigger a React Toast notification: 'AI detected a schedule change. Assignment 3 due date successfully synchronized across syllabus and calendar.'"
 
----
-
-## Phase 6: Agentic Context-Aware Chatbot
+### Phase 6: Agentic Context-Aware Chatbot
 
 **Goal:** Create the floating, viewport-aware student assistant.
 
-### Prompt 6:
+**Prompt 6:**
 
 "Implement the 'Context-Aware Course Chatbot' for the Student view.
 
