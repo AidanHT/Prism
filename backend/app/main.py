@@ -27,6 +27,7 @@ from app.routers import (
     modules,
     notifications,
     quizzes,
+    rubrics,
     users,
 )
 from app.sockets import create_socket_app
@@ -77,6 +78,7 @@ _fastapi_app.include_router(users.router, prefix=API_PREFIX)
 _fastapi_app.include_router(forum.router, prefix=API_PREFIX)
 _fastapi_app.include_router(grading.router, prefix=API_PREFIX)
 _fastapi_app.include_router(chatbot.router, prefix=API_PREFIX)
+_fastapi_app.include_router(rubrics.router, prefix=API_PREFIX)
 
 
 @_fastapi_app.get("/api/health", tags=["health"])

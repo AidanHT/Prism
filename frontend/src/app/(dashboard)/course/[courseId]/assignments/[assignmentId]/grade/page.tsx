@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -22,6 +23,8 @@ import { assignmentApi, courseApi, gradeApi } from "@/lib/api";
 import { useApiOpts } from "@/hooks/useApiOpts";
 import { useGradingStore } from "@/store/useGradingStore";
 import type { GradebookStudentRow, GradebookGradeEntry, SubmissionResponse } from "@/lib/types";
+import { AIAssistPanel } from "@/components/grading/AIAssistPanel";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -200,6 +203,14 @@ export default function SpeedGraderPage() {
   // Per-student form state — reset whenever studentIndex changes
   const [scoreInput, setScoreInput] = useState("");
   const [feedback, setFeedback] = useState("");
+  // AI Co-Pilot: controls initial content injected into the TipTap editor.
+  const [aiInitialFeedback, setAiInitialFeedback] = useState("");
+  // Incrementing this key forces the FeedbackEditor to remount with new content.
+  const [feedbackKey, setFeedbackKey] = useState(0);
+  // AI-suggested score tracked so the backend can compare against it.
+  const [aiSuggestedScore, setAiSuggestedScore] = useState<number | null>(null);
+  // Set to true when the backend flags the saved grade as an outlier.
+  const [anomalyFlag, setAnomalyFlag] = useState(false);
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
@@ -256,6 +267,23 @@ export default function SpeedGraderPage() {
     const entry = studentsWithGrades[index]?.entry;
     setScoreInput(entry?.score !== undefined ? String(entry.score) : "");
     setFeedback("");
+    setAiInitialFeedback("");
+    setAiSuggestedScore(null);
+    setAnomalyFlag(false);
+  }
+
+  // ── AI Co-Pilot callbacks ─────────────────────────────────────────────────
+
+  function handleAiAccept(score: number, feedbackText: string) {
+    setScoreInput(String(score));
+    setAiInitialFeedback(feedbackText);
+    setFeedbackKey((k) => k + 1);
+    setAiSuggestedScore(score);
+  }
+
+  function handleAiEdit(feedbackText: string) {
+    setAiInitialFeedback(feedbackText);
+    setFeedbackKey((k) => k + 1);
   }
 
   function navigate(dir: -1 | 1) {
@@ -279,12 +307,22 @@ export default function SpeedGraderPage() {
     }) =>
       gradeApi.update(
         gradeId,
-        { score, feedback: feedbackHtml || undefined },
+        {
+          score,
+          feedback: feedbackHtml || undefined,
+          ...(aiSuggestedScore !== null && { ai_suggested_score: aiSuggestedScore }),
+        },
         opts,
       ),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["gradebook", courseId] });
-      toast.success("Grade saved");
+    onSuccess: (data) => {
+      if (data.anomaly_flag) {
+        // Grade is persisted; hold off on cache invalidation until the TA confirms.
+        setAnomalyFlag(true);
+      } else {
+        setAnomalyFlag(false);
+        void qc.invalidateQueries({ queryKey: ["gradebook", courseId] });
+        toast.success("Grade saved");
+      }
     },
     onError: () => toast.error("Failed to save grade"),
   });
@@ -296,11 +334,18 @@ export default function SpeedGraderPage() {
       toast.error("Enter a valid score");
       return;
     }
+    setAnomalyFlag(false);
     updateGrade.mutate({
       gradeId: current.entry.grade_id,
       score,
       feedbackHtml: feedback,
     });
+  }
+
+  function handleConfirmOverride() {
+    setAnomalyFlag(false);
+    void qc.invalidateQueries({ queryKey: ["gradebook", courseId] });
+    toast.success("Grade saved");
   }
 
   // ── Loading / error ───────────────────────────────────────────────────────
@@ -541,20 +586,58 @@ export default function SpeedGraderPage() {
                     Feedback
                   </Label>
                   <FeedbackEditor
-                    key={`feedback-${studentIndex}`}
+                    key={`feedback-${studentIndex}-${feedbackKey}`}
+                    initial={aiInitialFeedback}
                     onUpdate={setFeedback}
                   />
                 </div>
 
-                <Button
-                  className="w-full"
-                  onClick={handleSave}
-                  disabled={updateGrade.isPending || !current}
-                >
-                  {updateGrade.isPending ? "Saving…" : "Save Grade"}
-                </Button>
+                {anomalyFlag ? (
+                  <div className="space-y-2">
+                    <Alert variant="warning">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>Grade deviation detected</AlertTitle>
+                      <AlertDescription>
+                        This grade deviates significantly from the class average
+                        and AI suggestion. Are you sure?
+                      </AlertDescription>
+                    </Alert>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setAnomalyFlag(false)}
+                      >
+                        Go Back
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="flex-1"
+                        onClick={handleConfirmOverride}
+                      >
+                        Confirm Override
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    className="w-full"
+                    onClick={handleSave}
+                    disabled={updateGrade.isPending || !current}
+                  >
+                    {updateGrade.isPending ? "Saving…" : "Save Grade"}
+                  </Button>
+                )}
               </CardContent>
             </Card>
+
+            {/* AI Co-Pilot panel */}
+            <AIAssistPanel
+              courseId={courseId}
+              submissionId={currentSubmission?.id}
+              onAccept={handleAiAccept}
+              onEdit={handleAiEdit}
+            />
 
             {/* Recorded score summary */}
             {current && (

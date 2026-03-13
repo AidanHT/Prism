@@ -42,6 +42,8 @@ class GradeUpdate(AppBaseModel):
     max_score: float | None = Field(None, gt=0.0)
     grader_id: UUID | None = None
     feedback: str | None = None
+    # Optional AI-suggested score forwarded by the frontend for variance comparison.
+    ai_suggested_score: float | None = Field(None, ge=0.0, exclude=True)
 
 
 class GradeResponse(GradeBase):
@@ -50,3 +52,15 @@ class GradeResponse(GradeBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class GradeWithAnomalyResponse(GradeResponse):
+    """Extended response returned by the update endpoint with variance metadata."""
+
+    anomaly_flag: bool = Field(
+        False,
+        description=(
+            "True when the submitted score deviates >15 percentage points from "
+            "the class average or the AI-suggested score."
+        ),
+    )
