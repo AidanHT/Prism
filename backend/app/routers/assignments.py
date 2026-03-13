@@ -194,3 +194,69 @@ async def submit_assignment(
             detail="Submission conflict.",
         ) from exc
     return submission
+
+
+# ── Submission query endpoints ────────────────────────────────────────────────
+
+@router.get(
+    "/courses/{course_id}/submissions/me",
+    response_model=list[SubmissionResponse],
+)
+async def list_my_course_submissions(
+    course_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Submission]:
+    """Return all submissions made by the current user for assignments in a course."""
+    result = await db.execute(
+        select(Submission)
+        .join(Assignment, Submission.assignment_id == Assignment.id)
+        .where(
+            Assignment.course_id == course_id,
+            Submission.student_id == current_user.id,
+        )
+    )
+    return list(result.scalars().all())
+
+
+@router.get(
+    "/assignments/{assignment_id}/submissions",
+    response_model=list[SubmissionResponse],
+)
+async def list_assignment_submissions(
+    assignment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Submission]:
+    """Return all student submissions for an assignment (professor / TA view)."""
+    result = await db.execute(
+        select(Assignment).where(Assignment.id == assignment_id)
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found.",
+        )
+    subs = await db.execute(
+        select(Submission).where(Submission.assignment_id == assignment_id)
+    )
+    return list(subs.scalars().all())
+
+
+@router.get(
+    "/assignments/{assignment_id}/submissions/me",
+    response_model=SubmissionResponse | None,
+)
+async def get_my_submission(
+    assignment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Submission | None:
+    """Return the current user's submission for an assignment, or null if none."""
+    result = await db.execute(
+        select(Submission).where(
+            Submission.assignment_id == assignment_id,
+            Submission.student_id == current_user.id,
+        )
+    )
+    return result.scalar_one_or_none()

@@ -18,6 +18,7 @@ class GradeBase(AppBaseModel):
     score: float = Field(..., ge=0.0)
     max_score: float = Field(..., gt=0.0)
     grader_id: UUID | None = None
+    feedback: str | None = None
 
 
 class GradeCreate(GradeBase):
@@ -40,6 +41,7 @@ class GradeUpdate(AppBaseModel):
     score: float | None = Field(None, ge=0.0)
     max_score: float | None = Field(None, gt=0.0)
     grader_id: UUID | None = None
+    feedback: str | None = None
 
 
 class GradeResponse(GradeBase):

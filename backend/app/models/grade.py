@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Float, ForeignKey
+from sqlalchemy import CheckConstraint, Float, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID as pg_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -47,6 +47,7 @@ class Grade(TimestampMixin, Base):
     )
     score: Mapped[float] = mapped_column(Float, nullable=False)
     max_score: Mapped[float] = mapped_column(Float, nullable=False)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     grader_id: Mapped[UUID | None] = mapped_column(
         pg_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
