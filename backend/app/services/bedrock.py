@@ -3,6 +3,9 @@
 All Bedrock API calls in the application must go through this module.
 """
 
+import asyncio
+import threading
+from collections.abc import AsyncIterator
 from typing import Any
 
 import boto3
@@ -95,3 +98,70 @@ def invoke_model_fast(
         max_tokens=max_tokens,
         temperature=temperature,
     )
+
+
+async def invoke_model_stream_async(
+    *,
+    model_id: str,
+    messages: list[dict[str, Any]],
+    system: str | None = None,
+    max_tokens: int = 2048,
+    temperature: float = 0.7,
+) -> AsyncIterator[str]:
+    """Stream text tokens from a Bedrock model via the converse_stream API.
+
+    Runs the blocking Boto3 call on a daemon thread and bridges chunks to the
+    async caller through an ``asyncio.Queue``, preserving true token-by-token
+    streaming without stalling the event loop.
+
+    Yields:
+        Individual text delta strings as they arrive from the model.
+    """
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    def _run_stream() -> None:
+        try:
+            client = get_bedrock_client()
+            request: dict[str, Any] = {
+                "modelId": model_id,
+                "messages": messages,
+                "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
+            }
+            if system is not None:
+                request["system"] = [{"text": system}]
+
+            response = client.converse_stream(**request)
+            for event in response["stream"]:
+                if "contentBlockDelta" in event:
+                    delta = event["contentBlockDelta"]["delta"]
+                    if "text" in delta:
+                        loop.call_soon_threadsafe(queue.put_nowait, delta["text"])
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, None)  # sentinel
+
+    threading.Thread(target=_run_stream, daemon=True).start()
+
+    while True:
+        chunk = await queue.get()
+        if chunk is None:
+            break
+        yield chunk
+
+
+async def invoke_model_complex_stream_async(
+    *,
+    messages: list[dict[str, Any]],
+    system: str | None = None,
+    max_tokens: int = 4096,
+    temperature: float = 0.7,
+) -> AsyncIterator[str]:
+    """Stream tokens from Claude Opus 4.6 for complex agentic tasks."""
+    async for chunk in invoke_model_stream_async(
+        model_id=settings.BEDROCK_MODEL_COMPLEX,
+        messages=messages,
+        system=system,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    ):
+        yield chunk

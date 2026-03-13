@@ -13,14 +13,17 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useAuthStore } from "@/store/useAuthStore";
 import { useNotificationStore } from "@/store/useNotificationStore";
+import { useForumStore } from "@/store/useForumStore";
 import { notificationApi } from "@/lib/api";
 import { getSocket, disconnectSocket } from "@/lib/socket";
 import { MOCK_NOTIFICATIONS } from "@/lib/mockData";
+import type { ForumPost } from "@/types/forum";
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const incrementUnread = useNotificationStore((s) => s.incrementUnread);
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
+  const addForumPost = useForumStore((s) => s.addPost);
   const qc = useQueryClient();
 
   // Seed the initial unread count from API (or fall back to mock data).
@@ -54,12 +57,23 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       qc.invalidateQueries({ queryKey: ["notifications"] });
     });
 
+    // Forum real-time broadcast: a new post was created in a course the user
+    // is subscribed to.  Optimistically prepend it to the in-memory store so
+    // the Thread View updates without a page refresh.
+    socket.on(
+      "new_post",
+      (payload: { event: string; post: ForumPost }) => {
+        if (payload?.post) addForumPost(payload.post);
+      },
+    );
+
     return () => {
       socket.off("new_message");
       socket.off("new_notification");
+      socket.off("new_post");
       disconnectSocket();
     };
-  }, [user, incrementUnread, qc]);
+  }, [user, incrementUnread, addForumPost, qc]);
 
   return <>{children}</>;
 }

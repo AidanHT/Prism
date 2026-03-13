@@ -282,6 +282,97 @@ export const notificationApi = {
     ),
 } as const;
 
+/** Forum threads, posts, and AI endpoints. */
+export const forumApi = {
+  listThreads: (courseId: string, opts: ApiOptions) =>
+    get<
+      {
+        id: string;
+        course_id: string;
+        title: string;
+        cluster_id: string | null;
+        vector_embedding_id: string | null;
+        created_at: string;
+      }[]
+    >(`/forum/courses/${courseId}/threads`, opts),
+
+  getThread: (
+    threadId: string,
+    opts: ApiOptions,
+  ) =>
+    get<{
+      id: string;
+      course_id: string;
+      title: string;
+      cluster_id: string | null;
+      vector_embedding_id: string | null;
+      created_at: string;
+    }>(`/forum/threads/${threadId}`, opts),
+
+  createThread: (
+    payload: {
+      course_id: string;
+      title: string;
+      content: string;
+      author_id: string;
+      cluster_id?: string;
+    },
+    opts: ApiOptions,
+  ) =>
+    post<{
+      id: string;
+      course_id: string;
+      title: string;
+      cluster_id: string | null;
+      vector_embedding_id: string | null;
+      created_at: string;
+    }>("/forum/threads", payload, opts),
+
+  listPosts: (threadId: string, opts: ApiOptions) =>
+    get<
+      {
+        id: string;
+        thread_id: string;
+        author_id: string;
+        content: string;
+        timestamp: string;
+      }[]
+    >(`/forum/threads/${threadId}/posts`, opts),
+
+  createPost: (
+    threadId: string,
+    payload: { author_id: string; content: string },
+    opts: ApiOptions,
+  ) =>
+    post<{
+      id: string;
+      thread_id: string;
+      author_id: string;
+      content: string;
+      timestamp: string;
+    }>(`/forum/threads/${threadId}/posts`, payload, opts),
+
+  taCheck: (
+    payload: { thread_id: string; course_id: string; draft_response: string },
+    opts: ApiOptions,
+  ) =>
+    post<{ is_accurate: boolean; tone_score: number; suggested_edits: string }>(
+      "/forum/ta-check",
+      payload,
+      opts,
+    ),
+
+  addToBrain: (
+    payload: { thread_id: string; author_role: "professor" | "ta" },
+    opts: ApiOptions,
+  ) =>
+    post<{ doc_id: string; message: string }>(
+      "/forum/add-to-brain",
+      payload,
+      opts,
+    ),
+} as const;
+
 /** User profile and search endpoints. */
 export const userApi = {
   me: (opts: ApiOptions) => get<UserMeResponse>("/users/me", opts),

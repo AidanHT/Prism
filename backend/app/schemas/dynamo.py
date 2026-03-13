@@ -29,6 +29,8 @@ class ForumThread(AppBaseModel):
     id: str = Field(..., description="UUID string – DynamoDB partition key")
     course_id: str = Field(..., description="UUID string – GSI partition key")
     title: str = Field(..., min_length=1, max_length=500)
+    # Semantic cluster this thread belongs to (populated after a clustering run).
+    cluster_id: str | None = None
     # Pointer to the corresponding OpenSearch embedding document.
     vector_embedding_id: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -39,12 +41,14 @@ class ForumThread(AppBaseModel):
         id: UUID,
         course_id: UUID,
         title: str,
+        cluster_id: str | None = None,
         vector_embedding_id: str | None = None,
     ) -> "ForumThread":
         return cls(
             id=str(id),
             course_id=str(course_id),
             title=title,
+            cluster_id=cluster_id,
             vector_embedding_id=vector_embedding_id,
         )
 

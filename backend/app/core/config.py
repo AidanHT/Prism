@@ -23,8 +23,19 @@ class Settings(BaseSettings):
     DYNAMODB_TABLE_SESSIONS: str = "prism-sessions"
 
     # Bedrock model IDs
-    BEDROCK_MODEL_COMPLEX: str = "claude-opus-4-6"
-    BEDROCK_MODEL_FAST: str = "claude-haiku-4-5-20251001"
+    BEDROCK_MODEL_COMPLEX: str = "anthropic.claude-opus-4-6-v1:0"
+    BEDROCK_MODEL_FAST: str = "anthropic.claude-haiku-4-5-20251001-v1:0"
+
+    # Forum AI settings
+    FORUM_SIMILARITY_THRESHOLD: float = 0.75
+
+    # OpenSearch (Vector Engine)
+    OPENSEARCH_HOST: str = "localhost"
+    OPENSEARCH_PORT: int = 9200
+    OPENSEARCH_USERNAME: str = "admin"
+    OPENSEARCH_PASSWORD: str = "admin"
+    OPENSEARCH_USE_SSL: bool = False
+    OPENSEARCH_FORUM_INDEX: str = "prism-forum-embeddings"
 
     # S3
     S3_FILES_BUCKET: str = "prism-files"
