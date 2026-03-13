@@ -14,14 +14,19 @@ import type {
   AnnouncementResponse,
   AssignmentResponse,
   CalendarEventResponse,
+  CalibrationResponse,
   CourseResponse,
   EnrollmentResponse,
+  EvaluateResponse,
   GradebookResponse,
   GradeResponse,
+  GradeWithAnomalyResponse,
   MessageResponse,
   NotificationResponse,
   QuizAttemptResponse,
   QuizResponse,
+  RubricGenerateResponse,
+  RubricResponse,
   SubmissionResponse,
   UploadUrlResponse,
   UserMeResponse,
@@ -91,6 +96,31 @@ function put<T>(path: string, body: unknown, opts: ApiOptions) {
 }
 function del<T>(path: string, opts: ApiOptions) {
   return request<T>(path, { method: "DELETE" }, opts);
+}
+
+/** Multipart/form-data POST – lets the browser set the Content-Type boundary. */
+async function multipartPost<T>(
+  path: string,
+  body: FormData,
+  { userId }: ApiOptions,
+): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    body,
+    headers: {
+      // No Content-Type — browser injects the multipart boundary automatically.
+      "X-User-Id": userId,
+    },
+  });
+
+  if (res.status === 204) return undefined as T;
+
+  if (!res.ok) {
+    const errBody: unknown = await res.json().catch(() => null);
+    throw new ApiError(res.status, errBody, `API ${res.status}: ${path}`);
+  }
+
+  return res.json() as Promise<T>;
 }
 
 // ── Typed endpoint namespaces ─────────────────────────────────────────────────
@@ -214,9 +244,9 @@ export const quizApi = {
 export const gradeApi = {
   update: (
     gradeId: string,
-    payload: { score: number; feedback?: string },
+    payload: { score: number; feedback?: string; ai_suggested_score?: number },
     opts: ApiOptions,
-  ) => put<GradeResponse>(`/grades/${gradeId}`, payload, opts),
+  ) => put<GradeWithAnomalyResponse>(`/grades/${gradeId}`, payload, opts),
 } as const;
 
 /** File upload endpoints (S3 presigned POST flow). */
@@ -376,6 +406,52 @@ export const forumApi = {
       },
       opts,
     ),
+} as const;
+
+/** Rubric generation, calibration, and listing endpoints. */
+export const rubricApi = {
+  /**
+   * Generate an AI-powered rubric from assignment instructions.
+   * Saves a draft rubric in the backend and returns its ID + criteria.
+   */
+  generate: (
+    payload: {
+      course_id: string;
+      assignment_title: string;
+      assignment_instructions: string;
+    },
+    opts: ApiOptions,
+  ) => post<RubricGenerateResponse>("/rubrics/generate", payload, opts),
+
+  /**
+   * Calibrate a draft rubric against 2–3 sample student submissions.
+   * Files are sent as multipart/form-data; PDFs are parsed via Textract.
+   */
+  calibrate: (
+    rubricId: string,
+    samples: File[],
+    opts: ApiOptions,
+  ): Promise<CalibrationResponse> => {
+    const form = new FormData();
+    form.append("rubric_id", rubricId);
+    for (const file of samples) {
+      form.append("samples", file);
+    }
+    return multipartPost<CalibrationResponse>("/rubrics/calibrate", form, opts);
+  },
+
+  /** List all rubrics (with criteria) belonging to a course. */
+  list: (courseId: string, opts: ApiOptions) =>
+    get<RubricResponse[]>(`/rubrics?course_id=${encodeURIComponent(courseId)}`, opts),
+} as const;
+
+/** AI grading co-pilot endpoints. */
+export const gradingApi = {
+  /** Run the full extraction → Bedrock evaluation → validation pipeline. */
+  evaluate: (
+    payload: { submission_id: string; rubric_id: string },
+    opts: ApiOptions,
+  ) => post<EvaluateResponse>("/grading/evaluate", payload, opts),
 } as const;
 
 /** User profile and search endpoints. */

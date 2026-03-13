@@ -10,10 +10,12 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { ClipboardList, Plus, Trash2 } from "lucide-react";
+import { ClipboardList, Plus, Sparkles, Trash2 } from "lucide-react";
 
 import { assignmentApi } from "@/lib/api";
 import { useApiOpts } from "@/hooks/useApiOpts";
+import { RubricGeneratorModal } from "@/components/rubric/RubricGeneratorModal";
+import type { GeneratedCriterion } from "@/lib/types";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -325,12 +327,14 @@ export default function NewAssignmentPage() {
   const qc = useQueryClient();
 
   const [rubricCriteria, setRubricCriteria] = useState<Criterion[]>([]);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
 
   const {
     register,
     handleSubmit,
     control,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<AssignmentFormValues>({
     resolver: zodResolver(assignmentSchema),
@@ -340,6 +344,18 @@ export default function NewAssignmentPage() {
       is_published: false,
     },
   });
+
+  const watchedTitle = watch("title");
+  const watchedDescription = watch("description");
+
+  function handleApplyGeneratedRubric(generatedCriteria: GeneratedCriterion[]) {
+    const mapped: Criterion[] = generatedCriteria.map((gc) => ({
+      id: crypto.randomUUID(),
+      description: gc.description,
+      ratings: gc.ratings.map((r) => ({ label: r.description, points: r.points })),
+    }));
+    setRubricCriteria(mapped);
+  }
 
   const createMutation = useMutation({
     mutationFn: (values: AssignmentFormValues) =>
@@ -527,10 +543,22 @@ export default function NewAssignmentPage() {
 
             {/* Rubric builder */}
             <div className="space-y-2">
-              <Label>Rubric</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label>Rubric</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setGeneratorOpen(true)}
+                  className="h-7 gap-1.5 text-xs"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Generate with AI
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground">
-                Define scoring criteria. Each criterion can have multiple rating
-                columns with point values.
+                Define scoring criteria manually or let the AI generate a rubric
+                from your assignment instructions.
               </p>
               <RubricBuilder
                 criteria={rubricCriteria}
@@ -573,6 +601,16 @@ export default function NewAssignmentPage() {
           </form>
         </CardContent>
       </Card>
+
+      <RubricGeneratorModal
+        open={generatorOpen}
+        onClose={() => setGeneratorOpen(false)}
+        courseId={courseId}
+        assignmentTitle={watchedTitle ?? ""}
+        assignmentInstructions={watchedDescription ?? ""}
+        onApply={handleApplyGeneratedRubric}
+        opts={opts}
+      />
     </div>
   );
 }

@@ -152,6 +152,12 @@ export interface GradeResponse {
   updated_at: string;
 }
 
+/** Returned by PUT /grades/{id} — includes variance metadata. */
+export interface GradeWithAnomalyResponse extends GradeResponse {
+  /** True when the submitted score deviates >15 pp from class average or AI suggestion. */
+  anomaly_flag: boolean;
+}
+
 // ── Gradebook ─────────────────────────────────────────────────────────────────
 
 export interface GradebookGradeEntry {
@@ -243,6 +249,83 @@ export interface UserMeResponse {
   avatar_url: string | null;
   bio: string | null;
   timezone: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Rubric AI generation ──────────────────────────────────────────────────────
+
+export interface GeneratedRating {
+  description: string;
+  points: number;
+}
+
+export interface GeneratedCriterion {
+  description: string;
+  points: number;
+  ratings: GeneratedRating[];
+}
+
+export interface RubricGenerateResponse {
+  rubric_id: string;
+  title: string;
+  criteria: GeneratedCriterion[];
+}
+
+export interface CalibrationWarning {
+  criterion_description: string;
+  warning_message: string;
+  variance_pct: number | null;
+}
+
+export interface CalibrationResponse {
+  rubric_id: string;
+  calibration_warnings: CalibrationWarning[];
+}
+
+// ── Grading AI Co-Pilot ───────────────────────────────────────────────────────
+
+export interface CriterionScore {
+  criterion_id: string;
+  score: number;
+}
+
+export interface EvaluationResult {
+  suggested_total_score: number;
+  criterion_breakdown: CriterionScore[];
+  constructive_feedback: string;
+}
+
+export interface EvaluateResponse {
+  submission_id: string;
+  rubric_id: string;
+  evaluation: EvaluationResult;
+}
+
+// ── Rubric detail (full response with criteria) ───────────────────────────────
+
+export interface RatingItem {
+  id: string;
+  description: string;
+  points: number;
+}
+
+export interface RubricCriterionResponse {
+  id: string;
+  rubric_id: string;
+  description: string;
+  points: number;
+  position: number;
+  ratings: RatingItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RubricResponse {
+  id: string;
+  course_id: string;
+  title: string;
+  criteria: RubricCriterionResponse[];
   created_at: string;
   updated_at: string;
 }

@@ -70,3 +70,47 @@ class RubricResponse(RubricBase):
     criteria: list[RubricCriterionResponse] = []
     created_at: datetime
     updated_at: datetime
+
+
+# ── AI Rubric Generation ──────────────────────────────────────────────────────
+
+class GeneratedRating(AppBaseModel):
+    """A single performance level returned by the AI generation endpoint."""
+
+    description: str = Field(..., min_length=1)
+    points: float = Field(..., ge=0.0)
+
+
+class GeneratedCriterion(AppBaseModel):
+    """A single criterion returned by the AI generation endpoint."""
+
+    description: str = Field(..., min_length=1)
+    points: float = Field(..., gt=0.0)
+    ratings: list[GeneratedRating]
+
+
+class RubricGenerateRequest(AppBaseModel):
+    course_id: UUID
+    assignment_title: str = Field(..., min_length=1, max_length=255)
+    assignment_instructions: str = Field(..., min_length=1)
+
+
+class RubricGenerateResponse(AppBaseModel):
+    rubric_id: UUID
+    title: str
+    criteria: list[GeneratedCriterion]
+
+
+# ── AI Rubric Calibration ─────────────────────────────────────────────────────
+
+class CalibrationWarning(AppBaseModel):
+    """A single calibration issue identified by the AI."""
+
+    criterion_description: str
+    warning_message: str
+    variance_pct: float | None = None
+
+
+class CalibrationResponse(AppBaseModel):
+    rubric_id: UUID
+    calibration_warnings: list[CalibrationWarning]

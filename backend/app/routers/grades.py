@@ -15,7 +15,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -26,7 +26,7 @@ from app.models.course import Course, Enrollment
 from app.models.grade import Grade
 from app.models.user import User
 from app.schemas.base import AppBaseModel
-from app.schemas.grades import GradeCreate, GradeResponse, GradeUpdate
+from app.schemas.grades import GradeCreate, GradeResponse, GradeUpdate, GradeWithAnomalyResponse
 
 router = APIRouter(tags=["grades"])
 
@@ -272,20 +272,61 @@ async def create_grade(
     return grade
 
 
-@router.put("/grades/{grade_id}", response_model=GradeResponse)
+# Threshold (in percentage points, 0–1 scale) beyond which a grade is flagged.
+_ANOMALY_THRESHOLD = 0.15
+
+
+@router.put("/grades/{grade_id}", response_model=GradeWithAnomalyResponse)
 async def update_grade(
     grade_id: UUID,
     payload: GradeUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Grade:
-    """Update an existing grade (e.g. after manual review)."""
+) -> GradeWithAnomalyResponse:
+    """Update an existing grade and return an anomaly flag when the score
+    deviates more than 15 percentage points from the class average or the
+    AI-suggested score.
+    """
     result = await db.execute(select(Grade).where(Grade.id == grade_id))
     grade = result.scalar_one_or_none()
     if grade is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grade not found.")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+
+    # Persist the new field values (exclude our synthetic ai_suggested_score).
+    for field, value in payload.model_dump(exclude_unset=True, exclude={"ai_suggested_score"}).items():
         setattr(grade, field, value)
     await db.flush()
     await db.refresh(grade)
-    return grade
+
+    # ── Anomaly detection ─────────────────────────────────────────────────────
+    anomaly_flag = False
+    new_score = grade.score
+    max_score = grade.max_score
+
+    if grade.assignment_id is not None and max_score > 0:
+        new_pct = new_score / max_score
+
+        # Class average (as a percentage) across all *other* graded submissions
+        # for the same assignment so we don't skew the baseline with this grade.
+        avg_result = await db.execute(
+            select(func.avg(Grade.score / Grade.max_score)).where(
+                Grade.assignment_id == grade.assignment_id,
+                Grade.id != grade_id,
+                Grade.max_score > 0,
+            )
+        )
+        class_avg_pct: float | None = avg_result.scalar_one_or_none()
+
+        if class_avg_pct is not None and abs(new_pct - class_avg_pct) > _ANOMALY_THRESHOLD:
+            anomaly_flag = True
+
+        # Also compare against the AI-suggested score when the frontend provides it.
+        if not anomaly_flag and payload.ai_suggested_score is not None:
+            ai_pct = payload.ai_suggested_score / max_score
+            if abs(new_pct - ai_pct) > _ANOMALY_THRESHOLD:
+                anomaly_flag = True
+
+    return GradeWithAnomalyResponse(
+        **GradeResponse.model_validate(grade).model_dump(),
+        anomaly_flag=anomaly_flag,
+    )
