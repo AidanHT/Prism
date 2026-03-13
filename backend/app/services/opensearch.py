@@ -15,7 +15,9 @@ import json
 from functools import partial
 from typing import Any
 
+import boto3
 from opensearchpy import OpenSearch, RequestsHttpConnection
+from requests_aws4auth import AWS4Auth
 
 from app.core.config import settings
 from app.services.bedrock import get_bedrock_client
@@ -35,16 +37,49 @@ _os_client: OpenSearch | None = None
 
 
 def get_opensearch_client() -> OpenSearch:
-    """Return a lazily-initialised OpenSearch client (singleton)."""
+    """Return a lazily-initialised OpenSearch client (singleton).
+
+    When OPENSEARCH_SERVERLESS is True, uses IAM SigV4 (service='aoss') instead
+    of basic auth. For local/self-managed OpenSearch, uses username/password.
+    """
     global _os_client
     if _os_client is None:
-        _os_client = OpenSearch(
-            hosts=[{"host": settings.OPENSEARCH_HOST, "port": settings.OPENSEARCH_PORT}],
-            http_auth=(settings.OPENSEARCH_USERNAME, settings.OPENSEARCH_PASSWORD),
-            use_ssl=settings.OPENSEARCH_USE_SSL,
-            verify_certs=False,
-            connection_class=RequestsHttpConnection,
-        )
+        if settings.OPENSEARCH_SERVERLESS:
+            credentials = boto3.Session().get_credentials()
+            if credentials is None:
+                raise RuntimeError(
+                    "OpenSearch Serverless requires AWS credentials; none found"
+                )
+            auth = AWS4Auth(
+                credentials.access_key,
+                credentials.secret_key,
+                settings.AWS_REGION,
+                "aoss",
+                session_token=credentials.token,
+            )
+            _os_client = OpenSearch(
+                hosts=[{"host": settings.OPENSEARCH_HOST, "port": 443}],
+                http_auth=auth,
+                use_ssl=True,
+                verify_certs=True,
+                connection_class=RequestsHttpConnection,
+            )
+        else:
+            _os_client = OpenSearch(
+                hosts=[
+                    {
+                        "host": settings.OPENSEARCH_HOST,
+                        "port": settings.OPENSEARCH_PORT,
+                    }
+                ],
+                http_auth=(
+                    settings.OPENSEARCH_USERNAME,
+                    settings.OPENSEARCH_PASSWORD,
+                ),
+                use_ssl=settings.OPENSEARCH_USE_SSL,
+                verify_certs=False,
+                connection_class=RequestsHttpConnection,
+            )
     return _os_client
 
 

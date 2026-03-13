@@ -5,7 +5,7 @@ Run from the ``backend/`` directory after starting DynamoDB Local:
     docker run -p 8000:8000 amazon/dynamodb-local
     python create_dynamodb_tables.py
 
-The script is idempotent – it silently skips tables that already exist.
+The script is idempotent - it silently skips tables that already exist.
 Set ``DYNAMODB_ENDPOINT_URL=http://localhost:8000`` in your ``.env`` (or
 export it) to target DynamoDB Local instead of AWS.
 """
@@ -25,6 +25,8 @@ def _client() -> "boto3.client":  # type: ignore[name-defined]
         kwargs["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
     if settings.AWS_SECRET_ACCESS_KEY:
         kwargs["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
+    if settings.AWS_SESSION_TOKEN:
+        kwargs["aws_session_token"] = settings.AWS_SESSION_TOKEN
     if settings.DYNAMODB_ENDPOINT_URL:
         kwargs["endpoint_url"] = settings.DYNAMODB_ENDPOINT_URL
     return boto3.client("dynamodb", **kwargs)  # type: ignore[return-value]

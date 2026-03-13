@@ -39,6 +39,8 @@ class DynamoDBManager:
                 kwargs["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
             if settings.AWS_SECRET_ACCESS_KEY:
                 kwargs["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
+            if settings.AWS_SESSION_TOKEN:
+                kwargs["aws_session_token"] = settings.AWS_SESSION_TOKEN
             if settings.DYNAMODB_ENDPOINT_URL:
                 kwargs["endpoint_url"] = settings.DYNAMODB_ENDPOINT_URL
             self._resource = boto3.resource("dynamodb", **kwargs)  # type: ignore[call-overload]
