@@ -39,15 +39,15 @@ const assignmentSchema = z
   .object({
     title: z.string().min(1, "Title is required").max(255),
     description: z.string().optional(),
-    points_possible: z.coerce
-      .number({ invalid_type_error: "Must be a number" })
+    points_possible: z
+      .number({ error: "Must be a number" })
       .min(0, "Must be ≥ 0"),
     due_date: z.string().optional(),
     lock_date: z.string().optional(),
     submission_types: z
       .array(z.enum(SUBMISSION_TYPES))
       .min(1, "Select at least one submission type"),
-    is_published: z.boolean().default(false),
+    is_published: z.boolean(),
   })
   .refine(
     (d) => {
@@ -566,8 +566,8 @@ export default function NewAssignmentPage() {
               >
                 {createMutation.isPending ? "Creating…" : "Create Assignment"}
               </Button>
-              <Button variant="ghost" asChild>
-                <Link href={`/course/${courseId}/assignments`}>Cancel</Link>
+              <Button variant="ghost" render={<Link href={`/course/${courseId}/assignments`} />}>
+                Cancel
               </Button>
             </div>
           </form>

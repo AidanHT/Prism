@@ -860,17 +860,11 @@ export default function QuizTakerPage() {
             )}
 
             <div className="flex gap-3 mt-2">
-              <Button asChild variant="outline">
-                <Link href={`/course/${courseId}/quizzes`}>
+              <Button render={<Link href={`/course/${courseId}/quizzes`} />} variant="outline">
                   Back to Quizzes
-                </Link>
               </Button>
-              <Button asChild>
-                <Link
-                  href={`/course/${courseId}/quizzes/${quizId}/results`}
-                >
+              <Button render={<Link href={`/course/${courseId}/quizzes/${quizId}/results`} />}>
                   View Results
-                </Link>
               </Button>
             </div>
           </CardContent>

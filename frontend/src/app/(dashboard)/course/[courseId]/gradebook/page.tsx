@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   createColumnHelper,
-  flexRender,
+
   getCoreRowModel,
   getFilteredRowModel,
   getSortedRowModel,
@@ -96,7 +96,7 @@ function GradeCell({
   if (isEditing) {
     return (
       <Input
-        autoFocus
+        ref={(el) => el?.focus()}
         type="number"
         min={0}
         max={entry.max_score}

@@ -40,11 +40,9 @@ export default async function FilesPage({ params }: Props) {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <Button asChild size="sm">
-          <Link href="#">
+        <Button render={<Link href={`/course/${courseId}/files/upload`} />} size="sm">
             <Upload className="mr-1.5 h-4 w-4" />
             Upload File
-          </Link>
         </Button>
       </div>
 

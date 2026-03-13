@@ -198,7 +198,6 @@ function ReplyComposer({
 
   const handleToneCheck = async () => {
     if (!user || !editor) return;
-    const html = editor.getHTML();
     const text = editor.getText().trim();
     if (!text) return;
 

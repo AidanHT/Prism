@@ -118,9 +118,6 @@ function SubmissionViewer({ submission }: { submission: SubmissionResponse | und
 
   const fileUrl = submission.file_url;
   const isPdf = fileUrl?.toLowerCase().endsWith(".pdf");
-  const isText =
-    !fileUrl ||
-    !!submission.body;
 
   return (
     <div className="space-y-3">

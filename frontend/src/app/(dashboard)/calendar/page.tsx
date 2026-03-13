@@ -1,5 +1,7 @@
+"use client";
+
 /**
- * Calendar page – server component shell.
+ * Calendar page – client component shell.
  *
  * FullCalendar accesses browser globals (window, document) during module
  * initialisation, so the interactive calendar is loaded as a dynamically

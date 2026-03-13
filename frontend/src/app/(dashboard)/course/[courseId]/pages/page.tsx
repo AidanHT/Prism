@@ -40,11 +40,9 @@ export default async function PagesListPage({ params }: Props) {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <Button asChild size="sm">
-          <Link href="#">
+        <Button render={<Link href={`/course/${courseId}/pages/new`} />} size="sm">
             <Plus className="mr-1.5 h-4 w-4" />
             New Page
-          </Link>
         </Button>
       </div>
 

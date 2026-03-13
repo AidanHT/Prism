@@ -71,7 +71,12 @@ export function AppSidebar() {
                 <SidebarMenuItem key={href}>
                   <SidebarMenuButton
                     render={<Link href={href} />}
-                    isActive={pathname === href || pathname.startsWith(href + "/")}
+                    isActive={
+                      pathname === href ||
+                      pathname.startsWith(href + "/") ||
+                      // Highlight "Courses" when inside /course/[courseId]
+                      (href === "/courses" && pathname.startsWith("/course/"))
+                    }
                   >
                     <Icon className="h-4 w-4" />
                     {label}

@@ -179,6 +179,11 @@ function FileDropZone({
   return (
     <div className="space-y-1.5">
       <div
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+        }}
         onDragOver={(e) => {
           e.preventDefault();
           setDragging(true);
@@ -504,12 +509,8 @@ export default function AssignmentSubmitPage() {
               >
                 {fileUploading ? "Uploading file…" : "Review & Submit"}
               </Button>
-              <Button variant="ghost" asChild>
-                <Link
-                  href={`/course/${courseId}/assignments/${assignmentId}`}
-                >
+              <Button variant="ghost" render={<Link href={`/course/${courseId}/assignments/${assignmentId}`} />}>
                   Cancel
-                </Link>
               </Button>
             </div>
           </form>

@@ -144,13 +144,9 @@ export default function AssignmentDetailPage() {
 
             <div className="flex shrink-0 gap-2">
               {isInstructor ? (
-                <Button asChild size="sm" variant="outline">
-                  <Link
-                    href={`/course/${courseId}/assignments/${assignmentId}/grade`}
-                  >
+                <Button render={<Link href={`/course/${courseId}/assignments/${assignmentId}/grade`} />} size="sm" variant="outline">
                     <Star className="mr-1.5 h-4 w-4" />
                     SpeedGrader
-                  </Link>
                 </Button>
               ) : mySubmission ? (
                 <Badge
@@ -162,13 +158,9 @@ export default function AssignmentDetailPage() {
                 </Badge>
               ) : (
                 !isLocked && (
-                  <Button asChild size="sm">
-                    <Link
-                      href={`/course/${courseId}/assignments/${assignmentId}/submit`}
-                    >
+                  <Button render={<Link href={`/course/${courseId}/assignments/${assignmentId}/submit`} />} size="sm">
                       <Upload className="mr-1.5 h-4 w-4" />
                       Submit
-                    </Link>
                   </Button>
                 )
               )}
@@ -277,13 +269,9 @@ export default function AssignmentDetailPage() {
                   )}
                   {!isLocked && (
                     <div className="pt-2">
-                      <Button asChild size="sm" variant="outline">
-                        <Link
-                          href={`/course/${courseId}/assignments/${assignmentId}/submit`}
-                        >
+                      <Button render={<Link href={`/course/${courseId}/assignments/${assignmentId}/submit`} />} size="sm" variant="outline">
                           <Upload className="mr-1.5 h-3.5 w-3.5" />
                           Resubmit
-                        </Link>
                       </Button>
                     </div>
                   )}

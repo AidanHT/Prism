@@ -121,7 +121,7 @@ function ComposeModal({
         <div className="space-y-3 mt-1">
           {/* Recipients with autocomplete */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <label htmlFor="recipient-search" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               To
             </label>
             <div className="flex flex-wrap gap-1.5 min-h-9 rounded-md border border-input bg-background px-3 py-1.5 focus-within:ring-2 focus-within:ring-ring">
@@ -141,6 +141,7 @@ function ComposeModal({
                 </span>
               ))}
               <input
+                id="recipient-search"
                 value={recipientSearch}
                 onChange={(e) => handleRecipientInput(e.target.value)}
                 placeholder={
@@ -175,10 +176,11 @@ function ComposeModal({
 
           {/* Subject */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <label htmlFor="message-subject" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Subject
             </label>
             <Input
+              id="message-subject"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Message subject…"
@@ -187,7 +189,7 @@ function ComposeModal({
 
           {/* Body – TipTap rich-text editor */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <label htmlFor="message-body" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Message
             </label>
             <EditorContent editor={editor} />

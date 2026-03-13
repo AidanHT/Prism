@@ -15,7 +15,7 @@ export function AppShell({ children }: AppShellProps) {
       <AppSidebar />
       <SidebarInset>
         <TopNav />
-        <main className="flex flex-1 flex-col gap-4 p-4">{children}</main>
+        <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
       </SidebarInset>
 
       {/* Viewport-Aware Chatbot placeholder — Phase 6 */}

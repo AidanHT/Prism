@@ -40,11 +40,9 @@ export default async function AnnouncementsPage({ params }: Props) {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <Button asChild size="sm">
-          <Link href={`/course/${courseId}/announcements/new`}>
+        <Button render={<Link href={`/course/${courseId}/announcements/new`} />} size="sm">
             <Plus className="mr-1.5 h-4 w-4" />
             New Announcement
-          </Link>
         </Button>
       </div>
 

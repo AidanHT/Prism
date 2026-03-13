@@ -175,6 +175,7 @@ export default function CourseLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const opts = useApiOpts();
   const setActiveCourse = useCourseStore((s) => s.setActiveCourse);
+  const clearActiveCourse = useCourseStore((s) => s.clearActiveCourse);
   const courses = useCourseStore((s) => s.courses);
   const user = useAuthStore((s) => s.user);
 
@@ -196,26 +197,29 @@ export default function CourseLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (courseId) setActiveCourse(courseId);
-  }, [courseId, setActiveCourse]);
+    return () => clearActiveCourse();
+  }, [courseId, setActiveCourse, clearActiveCourse]);
 
   return (
     <div
-      className="flex -m-4 flex-col"
-      style={{ minHeight: "calc(100svh - 3.5rem)" }}
+      className="flex flex-1 flex-col"
+      style={{ minHeight: "calc(100svh - 4rem)" }}
     >
       {/* ── Course Header ─────────────────────────────────── */}
       <header className="flex items-center gap-3 border-b bg-background px-4 py-3 shrink-0">
         {/* Mobile nav trigger */}
         <Sheet>
-          <SheetTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden shrink-0 h-8 w-8"
-            >
-              <Menu className="h-4 w-4" />
-              <span className="sr-only">Open course navigation</span>
-            </Button>
+          <SheetTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden shrink-0 h-8 w-8"
+              />
+            }
+          >
+            <Menu className="h-4 w-4" />
+            <span className="sr-only">Open course navigation</span>
           </SheetTrigger>
           <SheetContent side="left" className="w-60 p-0">
             <SheetHeader className="border-b px-4 py-3">

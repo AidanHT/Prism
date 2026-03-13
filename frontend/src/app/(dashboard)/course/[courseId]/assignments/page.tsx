@@ -183,11 +183,9 @@ export default function AssignmentsPage() {
         </Breadcrumb>
 
         {isInstructor && (
-          <Button asChild size="sm">
-            <Link href={`/course/${courseId}/assignments/new`}>
+          <Button render={<Link href={`/course/${courseId}/assignments/new`} />} size="sm">
               <Plus className="mr-1.5 h-4 w-4" />
               New Assignment
-            </Link>
           </Button>
         )}
       </div>

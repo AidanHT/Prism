@@ -40,11 +40,9 @@ export default async function RubricsPage({ params }: Props) {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <Button asChild size="sm">
-          <Link href="#">
+        <Button render={<Link href={`/course/${courseId}/rubrics/new`} />} size="sm">
             <Plus className="mr-1.5 h-4 w-4" />
             New Rubric
-          </Link>
         </Button>
       </div>
 

@@ -40,11 +40,9 @@ export default async function QuizzesPage({ params }: Props) {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <Button asChild size="sm">
-          <Link href={`/course/${courseId}/quizzes/new`}>
+        <Button render={<Link href={`/course/${courseId}/quizzes/new`} />} size="sm">
             <Plus className="mr-1.5 h-4 w-4" />
             New Quiz
-          </Link>
         </Button>
       </div>
 

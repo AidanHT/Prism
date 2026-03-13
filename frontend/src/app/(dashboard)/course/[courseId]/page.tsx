@@ -20,8 +20,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-
 type Props = { params: Promise<{ courseId: string }> };
 
 export default async function CourseHomePage({ params }: Props) {
